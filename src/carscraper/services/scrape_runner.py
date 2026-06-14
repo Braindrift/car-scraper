@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import Dealer
-from carscraper.scrapers.base import CarListingDTO
+from carscraper.db.models import Dealer, TrackedModel
+from carscraper.scrapers.base import CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.registry import run_scraper
 
 
@@ -44,8 +44,13 @@ async def run_enabled_dealers(session: Session, dealer_slug: str | None = None) 
 
     dealers = session.execute(stmt).scalars().all()
 
+    tracked = [
+        TrackedModelSpec(make=tm.make, model=tm.model, variant=tm.variant)
+        for tm in session.execute(select(TrackedModel)).scalars()
+    ]
+
     listings: list[CarListingDTO] = []
     for dealer in dealers:
-        listings.extend(await run_scraper(dealer.scraper_module))
+        listings.extend(await run_scraper(dealer.scraper_module, tracked))
 
     return ScrapeRunResult(dealers_scraped=len(dealers), listings=listings)

@@ -61,6 +61,22 @@ class CarListingDTO(BaseModel):
     image_urls: list[str] = Field(default_factory=list)
 
 
+class TrackedModelSpec(BaseModel):
+    """Make/model (optionally variant) a scraper should fetch listings for.
+
+    Decoupled from the SQLAlchemy `TrackedModel` (`db/models.py`) so that
+    `scrapers/` never imports `db/` (per CLAUDE.md's layer boundaries) —
+    `services/` converts `TrackedModel` rows to these before calling
+    `BaseScraper.scrape()`.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    make: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    variant: str | None = None
+
+
 class BaseScraper(ABC):
     """Interface implemented by each dealer's scraper module.
 
@@ -70,6 +86,14 @@ class BaseScraper(ABC):
     """
 
     @abstractmethod
-    async def scrape(self) -> list[CarListingDTO]:
-        """Fetch and parse this dealer's listings into `CarListingDTO`s."""
+    async def scrape(self, tracked: list[TrackedModelSpec] | None = None) -> list[CarListingDTO]:
+        """Fetch and parse this dealer's listings into `CarListingDTO`s.
+
+        `tracked` is the set of make/model (optionally variant) combinations
+        the user wants scraped, as `TrackedModelSpec`s. Most scrapers (e.g.
+        kvd_se, demo) fetch their whole catalog and ignore it; scrapers whose
+        site can only be queried per make/model (e.g. bilweb_se) use it to
+        build targeted requests. `None`/empty means "nothing tracked" — such
+        scrapers should return `[]`.
+        """
         raise NotImplementedError

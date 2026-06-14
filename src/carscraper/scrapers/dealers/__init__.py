@@ -7,6 +7,9 @@ greppable in one place (no filesystem scanning — see `registry.py`).
 
 from __future__ import annotations
 
+# bilweb.se: real dealer scraper (CAR-18), registered under "bilweb_se".
+from carscraper.scrapers.dealers import bilweb_se as _bilweb_se  # noqa: F401
+
 # Dev/demo-only simulated scrapers (registered under the `demo_*` slugs).
 from carscraper.scrapers.dealers import demo as _demo  # noqa: F401
 

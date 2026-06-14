@@ -6,7 +6,7 @@ any network/Playwright/httpx usage, per CAR-3's "out of scope" note.
 
 from __future__ import annotations
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.registry import register
 
 DUMMY_LISTINGS: list[CarListingDTO] = [
@@ -35,5 +35,5 @@ DUMMY_LISTINGS: list[CarListingDTO] = [
 class DummyScraper(BaseScraper):
     """Returns a static list of `CarListingDTO`s."""
 
-    async def scrape(self) -> list[CarListingDTO]:
+    async def scrape(self, tracked: list[TrackedModelSpec] | None = None) -> list[CarListingDTO]:
         return list(DUMMY_LISTINGS)

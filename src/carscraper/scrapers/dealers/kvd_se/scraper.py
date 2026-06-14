@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import httpx
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.dealers.kvd_se.api import fetch_car_auctions
 from carscraper.scrapers.dealers.kvd_se.parse import parse_auction
 from carscraper.scrapers.registry import register
@@ -23,7 +23,9 @@ from carscraper.scrapers.registry import register
 class KvdSeScraper(BaseScraper):
     """Fetches and parses kvd.se's full car-auction catalog."""
 
-    async def scrape(self) -> list[CarListingDTO]:
+    async def scrape(self, tracked: list[TrackedModelSpec] | None = None) -> list[CarListingDTO]:
+        # kvd.se's API has no per-make/model filter, so the whole catalog is
+        # fetched regardless - `tracked` is ignored (see CAR-16).
         async with httpx.AsyncClient() as client:
             auctions = await fetch_car_auctions(client)
 

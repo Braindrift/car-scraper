@@ -47,7 +47,7 @@ from carscraper.db.models import (
     ScrapeRun,
     TrackedModel,
 )
-from carscraper.scrapers.base import CarListingDTO
+from carscraper.scrapers.base import CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.registry import run_scraper
 from carscraper.services.images import download_listing_images
 
@@ -259,8 +259,11 @@ async def scrape_and_persist_dealer(session: Session, dealer: Dealer) -> ScrapeR
     session.commit()  # persist the "running" run so it's visible even on crash
 
     try:
-        dtos = await run_scraper(dealer.scraper_module)
         tracked = list(session.execute(select(TrackedModel)).scalars())
+        tracked_specs = [
+            TrackedModelSpec(make=tm.make, model=tm.model, variant=tm.variant) for tm in tracked
+        ]
+        dtos = await run_scraper(dealer.scraper_module, tracked_specs)
         finished_at = _now()
         persist_scrape_results(session, dealer, scrape_run, dtos, tracked, finished_at)
 

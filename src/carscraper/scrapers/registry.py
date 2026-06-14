@@ -16,7 +16,7 @@ each) is a `services/` concern for a later ticket.
 
 from __future__ import annotations
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
 
 _REGISTRY: dict[str, type[BaseScraper]] = {}
 
@@ -51,15 +51,20 @@ def get_scraper_class(slug: str) -> type[BaseScraper]:
         raise KeyError(f"No scraper registered for slug {slug!r}") from None
 
 
-async def run_scraper(slug: str) -> list[CarListingDTO]:
+async def run_scraper(
+    slug: str, tracked: list[TrackedModelSpec] | None = None
+) -> list[CarListingDTO]:
     """Instantiate and run the scraper registered under `slug`.
 
-    Returns the `CarListingDTO`s produced by that scraper's `scrape()`.
+    `tracked` is forwarded to `BaseScraper.scrape()` — see
+    `scrapers/base.py::BaseScraper.scrape` for what it's used for and which
+    scrapers ignore it. Returns the `CarListingDTO`s produced by that
+    scraper's `scrape()`.
     """
 
     scraper_cls = get_scraper_class(slug)
     scraper = scraper_cls()
-    return await scraper.scrape()
+    return await scraper.scrape(tracked)
 
 
 # Importing the dealers package triggers each dealer module's `@register`

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+Trimmed real capture of https://bilweb.se/sok/volvo/xc60 (CAR-18).
+
+Kept cards (by id):
+- 12744401: no `Drivmedel` row at all (fuel_type -> None). Truncated heading
+  "Volvo XC60 Recharge T6 AWD Geartronic Core Ed.." with full title in the
+  image `alt` -> variant derivation strips the "Volvo XC60 " prefix and the
+  trailing " 2023" year.
+- 12744358: diesel (Icon--diesel). Truncated heading
+  "Volvo XC60 D4 AWD Summum VOC Varmare Dragkrok.." with full title in `alt`
+  -> variant derivation. Mileage 20 600 mil -> 206 000 km.
+
+Surrounding page structure trimmed to the minimum BeautifulSoup needs: a
+`#vehicle_card` container with `Card-Wrapper` > `div.Card` per listing.
+-->
+<html lang="sv">
+  <head>
+    <meta charset="utf8" />
+    <title>Volvo XC60 till salu - Bilweb.se</title>
+  </head>
+  <body>
+    <div class="tabs-panel is-active">
+      <div class="Grid Grid--gutterHmd Grid--gutterVlg Grid--equalHeight" id="vehicle_card">
+        <div class="Card-Wrapper Grid-cell u-sm-size1of2 u-lg-size1of3 u-size1of1">
+          <div class="Card " id="12744401">
+            <div class="Card-ImageFrame">
+              <div class="Card-image CardImage--boarder">
+                <img data-src="https://bilweb.se/i?u=107379052&amp;w=400&amp;h=250&amp;c=1" alt="Volvo XC60 Recharge T6 AWD Geartronic Core Edition Drag El Stol H 2023" class="goToObject lazyload">
+              </div>
+            </div>
+            <div class="Card-content u-paddingBxsm u-posRelative">
+              <h3 class="Card-heading"><a class="go_to_detail" href="https://bilweb.se/vasternorrlands-lan/volvo-xc60-recharge-t6-awd-geartronic-core-edition-drag-el-stol-h-2023-suv-12744401">Volvo XC60 Recharge T6 AWD Geartronic Core Ed..</a></h3>
+              <div class="Card-price">
+                Pris <p class="Card-mainPrice">439 700 kr</p>
+                <span class="Card-monthPrice monthly-cost-link">
+                  <a href="/billan/jamfor?objCost=439700&amp;objImg=https://bilweb.se/i?u=107379052&amp;w=621&amp;h=413&amp;c=1" data-track-event="monthly_cost_list" data-dealer-name="Hedin Automotive BMW Ornskoldsvik" data-brand-name="Volvo" data-model-name="XC60" target="_blank" rel="nofollow">Berakna manadskostnad</a>
+                </span>
+                <p class="Card-noVatPrice">351 760 kr exkl.moms</p>
+              </div>
+              <span class="Card-firm">Hedin Automotive BMW Ornskoldsvik</span>
+              <dl class="Card-carData">
+                <dt>Mil:</dt>
+                <dd>5 641</dd>
+                <dt>År:</dt>
+                <dd>2023</dd>
+              </dl>
+            </div>
+            <div class="Button--horisont">
+              <button class="Button Button--square Button--Split compare-button" data-objectid="12744401">Jamfor<i class="Icon Icon--checkmark u-marginLxsm"></i></button>
+              <a class="Button Button--squareGreen Button--Split goToObject">Se bil</a>
+            </div>
+          </div>
+        </div>
+        <div class="Card-Wrapper Grid-cell u-sm-size1of2 u-lg-size1of3 u-size1of1">
+          <div class="Card " id="12744358">
+            <div class="Card-ImageFrame">
+              <div class="Card-image CardImage--boarder">
+                <img data-src="https://bilweb.se/i?u=107377419&amp;w=400&amp;h=250&amp;c=1" alt="Volvo XC60 D4 AWD Summum VOC Varmare Dragkrok Skinn 2016" class="goToObject lazyload">
+              </div>
+            </div>
+            <div class="Card-content u-paddingBxsm u-posRelative">
+              <h3 class="Card-heading"><a class="go_to_detail" href="https://bilweb.se/sodermanlands-lan/volvo-xc60-d4-awd-summum-voc-varmare-dragkrok-skinn-2016-suv-12744358">Volvo XC60 D4 AWD Summum VOC Varmare Dragkrok..</a></h3>
+              <div class="Card-price">
+                Pris <p class="Card-mainPrice">159 800 kr</p>
+                <span class="Card-monthPrice monthly-cost-link">
+                  <a href="/billan/jamfor?objCost=159800&amp;objImg=https://bilweb.se/i?u=107377419&amp;w=621&amp;h=413&amp;c=1" data-track-event="monthly_cost_list" data-dealer-name="Riddermark Bil - Megastore" data-brand-name="Volvo" data-model-name="XC60" target="_blank" rel="nofollow">Berakna manadskostnad</a>
+                </span>
+              </div>
+              <span class="Card-firm">Riddermark Bil - Megastore</span>
+              <dl class="Card-carData">
+                <dt>Mil:</dt>
+                <dd>20 600</dd>
+                <dt>År:</dt>
+                <dd>2016</dd>
+                <dt>Drivmedel:</dt>
+                <dd><span class="Icon Icon--diesel"></span></dd>
+              </dl>
+            </div>
+            <div class="Button--horisont">
+              <button class="Button Button--square Button--Split compare-button" data-objectid="12744358">Jamfor<i class="Icon Icon--checkmark u-marginLxsm"></i></button>
+              <a class="Button Button--squareGreen Button--Split goToObject">Se bil</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

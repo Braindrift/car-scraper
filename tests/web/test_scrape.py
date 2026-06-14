@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from carscraper.db.models import Dealer, ScrapeRun, TrackedModel
 from carscraper.db.session import Base, SessionLocal, create_db_engine
 from carscraper.main import app
-from carscraper.scrapers.base import BaseScraper, CarListingDTO
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.registry import register
 from carscraper.services.scrape_results import STATUS_SUCCESS
 from carscraper.services.scrape_status import (
@@ -47,7 +47,7 @@ _NEXT_DTOS: list[CarListingDTO] = []
 
 @register(_SLUG)
 class _WebScraper(BaseScraper):
-    async def scrape(self) -> list[CarListingDTO]:
+    async def scrape(self, tracked: list[TrackedModelSpec] | None = None) -> list[CarListingDTO]:
         return list(_NEXT_DTOS)
 
 

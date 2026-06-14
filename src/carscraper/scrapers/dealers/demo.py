@@ -32,7 +32,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.registry import register
 
 
@@ -72,7 +72,9 @@ class _SimulatedScraper(BaseScraper):
     slug: str
     catalog: list[_CatalogEntry]
 
-    async def scrape(self) -> list[CarListingDTO]:
+    async def scrape(self, tracked: list[TrackedModelSpec] | None = None) -> list[CarListingDTO]:
+        # Simulated catalog is fixed and already lines up with the demo
+        # TrackedModel rows (see module docstring) - `tracked` is ignored.
         dtos: list[CarListingDTO] = []
         for entry in self.catalog:
             if random.random() > _INCLUDE_PROBABILITY:
