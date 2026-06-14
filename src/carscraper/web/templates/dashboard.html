@@ -4,7 +4,10 @@
 
 {% block content %}
   <h1 class="text-2xl font-bold mb-4">Dashboard</h1>
-  <div class="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
-    No listings yet — run a scrape to get started.
+
+  {% include "partials/listings_filter_form.html" %}
+
+  <div id="listings-table">
+    {% include "partials/listings_table.html" %}
   </div>
 {% endblock %}
