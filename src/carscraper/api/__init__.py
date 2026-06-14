@@ -1,10 +1,8 @@
-"""FastAPI routers (listings, dealers, config, stats).
+"""FastAPI JSON API routers.
 
-Routers are thin: validate input, call a service, return a schema.
+Reserved for future real JSON API endpoints. The CAR-4 placeholder routers
+(listings/dealers/config/stats) were removed in CAR-10 once the web layer
+(CAR-6/7/8) covered their intended areas via direct HTML routes.
 """
 
 from __future__ import annotations
-
-from carscraper.api import config, dealers, listings, stats
-
-__all__ = ["config", "dealers", "listings", "stats"]

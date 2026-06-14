@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from carscraper.api import config, dealers, listings, stats
 from carscraper.config import settings
 from carscraper.web import routes as web_routes
 
@@ -24,10 +23,6 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(web_routes.router)
-    app.include_router(listings.router)
-    app.include_router(dealers.router)
-    app.include_router(config.router)
-    app.include_router(stats.router)
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
