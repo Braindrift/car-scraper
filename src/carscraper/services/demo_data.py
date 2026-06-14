@@ -246,6 +246,17 @@ class SeedSummary:
     reset: bool
 
 
+@dataclass(frozen=True)
+class ClearSummary:
+    """Row counts removed by `clear_demo_data`, for the CLI to report."""
+
+    dealers: int
+    tracked_models: int
+    listings: int
+    price_snapshots: int
+    images: int
+
+
 def _demo_dealer_slugs() -> set[str]:
     return {d["scraper_module"] for d in _DEALERS}
 
@@ -276,13 +287,19 @@ def _seed_listing_images(listing: CarListing, dealer_slug: str, count: int) -> i
     return count
 
 
-def _clear_demo_data(session: Session) -> None:
+def clear_demo_data(session: Session) -> ClearSummary:
     """Delete all demo dealers (and their listings/snapshots/images via
     cascade) and demo tracked models, plus the demo image files on disk.
 
     Used by `reset=True` to wipe previously-seeded demo rows before
-    reseeding from scratch.
+    reseeding from scratch, and by the `clear-demo-data` CLI command to wipe
+    them without reseeding. Safe to call when no demo data exists — returns
+    all-zero counts and makes no changes.
+
+    Returns the counts of what was removed.
     """
+    removed = _current_counts(session)
+
     for slug in _demo_dealer_slugs():
         dealer = get_dealer_by_scraper_module(session, slug)
         if dealer is not None:
@@ -303,6 +320,14 @@ def _clear_demo_data(session: Session) -> None:
             session.delete(existing)
 
     session.commit()
+
+    return ClearSummary(
+        dealers=removed.dealers,
+        tracked_models=removed.tracked_models,
+        listings=removed.listings,
+        price_snapshots=removed.price_snapshots,
+        images=removed.images,
+    )
 
 
 def _demo_data_exists(session: Session) -> bool:
@@ -358,7 +383,7 @@ def seed_demo_data(session: Session, reset: bool = False) -> SeedSummary:
     Returns a `SeedSummary` with the resulting row counts.
     """
     if reset:
-        _clear_demo_data(session)
+        clear_demo_data(session)
     elif _demo_data_exists(session):
         return _current_counts(session)
 

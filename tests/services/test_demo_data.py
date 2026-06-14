@@ -24,6 +24,8 @@ from carscraper.services.demo_data import (
     _LISTING_IMAGE_COUNTS,
     _LISTINGS,
     _TRACKED_MODELS,
+    ClearSummary,
+    clear_demo_data,
     seed_demo_data,
 )
 
@@ -129,6 +131,41 @@ def test_seed_demo_data_listings_belong_to_demo_dealers(session: Session) -> Non
     listings = session.execute(select(CarListing)).scalars().all()
     assert all(listing.dealer_id in {d.id for d in dealers} for listing in listings)
     assert all(listing.external_id.startswith("demo-") for listing in listings)
+
+
+def test_clear_demo_data_removes_everything(session: Session) -> None:
+    seed_demo_data(session)
+    image_paths = [
+        settings.static_root / image.local_path
+        for image in session.execute(select(ListingImage)).scalars().all()
+    ]
+
+    summary = clear_demo_data(session)
+
+    assert summary.dealers == len(_DEALERS)
+    assert summary.tracked_models == len(_TRACKED_MODELS)
+    assert summary.listings == len(_LISTINGS)
+    assert summary.price_snapshots == _EXPECTED_SNAPSHOTS
+    assert summary.images == _EXPECTED_IMAGES
+
+    assert _count(session, Dealer) == 0
+    assert _count(session, TrackedModel) == 0
+    assert _count(session, CarListing) == 0
+    assert _count(session, PriceSnapshot) == 0
+    assert _count(session, ListingImage) == 0
+
+    for path in image_paths:
+        assert not path.exists()
+
+
+def test_clear_demo_data_on_empty_db_is_noop(session: Session) -> None:
+    summary = clear_demo_data(session)
+
+    assert summary == ClearSummary(
+        dealers=0, tracked_models=0, listings=0, price_snapshots=0, images=0
+    )
+    assert _count(session, Dealer) == 0
+    assert _count(session, TrackedModel) == 0
 
 
 def test_seed_demo_data_price_history_is_chronological(session: Session) -> None:

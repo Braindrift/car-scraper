@@ -11,7 +11,7 @@ import asyncio
 import typer
 
 from carscraper.db.session import get_session
-from carscraper.services.demo_data import seed_demo_data
+from carscraper.services.demo_data import clear_demo_data, seed_demo_data
 from carscraper.services.scrape_runner import run_enabled_dealers
 
 app = typer.Typer(help="CarScraper 2.0 command-line interface.")
@@ -71,6 +71,25 @@ def seed_demo_data_command(
     action = "Reseeded" if summary.reset else "Seeded (or found existing)"
     typer.echo(
         f"{action} demo data: {summary.dealers} dealer(s), "
+        f"{summary.tracked_models} tracked model(s), {summary.listings} listing(s), "
+        f"{summary.price_snapshots} price snapshot(s), {summary.images} image(s)"
+    )
+
+
+@app.command("clear-demo-data")
+def clear_demo_data_command() -> None:
+    """**Dev/demo-only.** Remove all demo dealers, tracked models, listings,
+    price history, and images seeded by `seed-demo-data`.
+
+    Unlike `seed-demo-data --reset`, this does not reseed afterward — use it
+    to get a clean database before testing a real scraper. Safe to run when
+    no demo data exists (reports all-zero counts, makes no changes).
+    """
+    with get_session() as session:
+        summary = clear_demo_data(session)
+
+    typer.echo(
+        f"Cleared demo data: {summary.dealers} dealer(s), "
         f"{summary.tracked_models} tracked model(s), {summary.listings} listing(s), "
         f"{summary.price_snapshots} price snapshot(s), {summary.images} image(s)"
     )
