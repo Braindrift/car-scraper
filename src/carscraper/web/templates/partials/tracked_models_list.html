@@ -1,0 +1,43 @@
+{% if error %}
+  <div class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    {{ error }}
+  </div>
+{% endif %}
+
+{% if tracked_models %}
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-200 text-left text-gray-500">
+        <th class="py-2 pr-4">Make</th>
+        <th class="py-2 pr-4">Model</th>
+        <th class="py-2 pr-4">Variant</th>
+        <th class="py-2 pr-4"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tracked in tracked_models %}
+        <tr class="border-b border-gray-100">
+          <td class="py-2 pr-4">{{ tracked.make }}</td>
+          <td class="py-2 pr-4">{{ tracked.model }}</td>
+          <td class="py-2 pr-4">{{ tracked.variant or "-" }}</td>
+          <td class="py-2 pr-4 text-right">
+            <button
+              type="button"
+              hx-delete="/tracked-models/{{ tracked.id }}"
+              hx-target="#tracked-models-list"
+              hx-swap="innerHTML"
+              hx-confirm="Remove {{ tracked.make }} {{ tracked.model }}{% if tracked.variant %} {{ tracked.variant }}{% endif %}?"
+              class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+            >
+              Remove
+            </button>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+    No tracked models yet — add a make and model below to start tracking it.
+  </div>
+{% endif %}

@@ -7,7 +7,7 @@ logic live here (see CLAUDE.md's "Layer responsibilities").
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from carscraper.db.session import get_session
@@ -15,6 +15,11 @@ from carscraper.services.listings import (
     ListingFilters,
     list_car_listings,
     list_dealers_with_listings,
+)
+from carscraper.services.tracked_models import (
+    create_tracked_model,
+    delete_tracked_model,
+    list_tracked_models,
 )
 from carscraper.web.templating import templates
 
@@ -101,4 +106,68 @@ def listings_table(
         request,
         "partials/listings_table.html",
         {"listings": listings},
+    )
+
+
+@router.get("/tracked-models", response_class=HTMLResponse)
+def tracked_models_page(request: Request) -> HTMLResponse:
+    """Render the tracked-models config page.
+
+    Lists the currently configured `TrackedModel` rows and includes the
+    add form. Removal is handled via the HTMX-driven list partial.
+    """
+    with get_session() as session:
+        tracked_models = list_tracked_models(session)
+
+    return templates.TemplateResponse(
+        request,
+        "tracked_models.html",
+        {"tracked_models": tracked_models, "error": None},
+    )
+
+
+@router.post("/tracked-models", response_class=HTMLResponse)
+def add_tracked_model(
+    request: Request,
+    make: str = Form(""),
+    model: str = Form(""),
+    variant: str = Form(""),
+) -> HTMLResponse:
+    """Add a new tracked model and re-render the tracked-models list partial.
+
+    `make` and `model` are required; `variant` is optional. On validation
+    failure, re-renders the list partial with an error message and without
+    creating a row, so the HTMX swap can surface the error inline.
+    """
+    make = make.strip()
+    model = model.strip()
+    variant = variant.strip()
+
+    error: str | None = None
+    if not make or not model:
+        error = "Make and model are required."
+
+    with get_session() as session:
+        if error is None:
+            create_tracked_model(session, make=make, model=model, variant=variant or None)
+        tracked_models = list_tracked_models(session)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/tracked_models_list.html",
+        {"tracked_models": tracked_models, "error": error},
+    )
+
+
+@router.delete("/tracked-models/{tracked_model_id}", response_class=HTMLResponse)
+def remove_tracked_model(request: Request, tracked_model_id: int) -> HTMLResponse:
+    """Delete a tracked model and re-render the tracked-models list partial."""
+    with get_session() as session:
+        delete_tracked_model(session, tracked_model_id)
+        tracked_models = list_tracked_models(session)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/tracked_models_list.html",
+        {"tracked_models": tracked_models, "error": None},
     )

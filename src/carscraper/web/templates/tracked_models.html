@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Tracked Models - CarScraper{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-bold mb-4">Tracked Models</h1>
+
+  {% include "partials/tracked_models_form.html" %}
+
+  <div id="tracked-models-list">
+    {% include "partials/tracked_models_list.html" %}
+  </div>
+{% endblock %}
