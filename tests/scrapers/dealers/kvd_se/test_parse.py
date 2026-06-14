@@ -65,6 +65,58 @@ def test_parse_auction_price_falls_back_to_preliminary_price() -> None:
     assert dto.transmission == "Automatic"
 
 
+def test_parse_auction_price_prefers_winning_bid() -> None:
+    """`winningBid` ("Ledande bud") outranks startBid, buyNowAmount, and
+    preliminaryPrice when present."""
+    raw = {
+        "id": "500001",
+        "auctionUrl": "https://www.kvd.se/example-winning-bid",
+        "winningBid": 274000,
+        "startBid": 250000,
+        "buyNowAmount": 380000,
+        "buyNowAvailable": True,
+        "preliminaryPrice": 380000,
+        "processObject": {
+            "properties": {
+                "brand": "Peugeot",
+                "familyName": "5008",
+                "modelName": "5008 Hybrid (136hk)",
+            }
+        },
+    }
+
+    dto = parse_auction(raw)
+
+    assert dto is not None
+    assert dto.price == 274000
+
+
+def test_parse_auction_price_falls_back_to_start_bid() -> None:
+    """No `winningBid` -> `startBid` ("Utgångspris") outranks buyNowAmount
+    and preliminaryPrice."""
+    raw = {
+        "id": "500002",
+        "auctionUrl": "https://www.kvd.se/example-start-bid",
+        "winningBid": None,
+        "startBid": 108000,
+        "buyNowAmount": None,
+        "buyNowAvailable": False,
+        "preliminaryPrice": 215000,
+        "processObject": {
+            "properties": {
+                "brand": "Peugeot",
+                "familyName": "5008",
+                "modelName": "5008 1.5 BlueHDi (130hk)",
+            }
+        },
+    }
+
+    dto = parse_auction(raw)
+
+    assert dto is not None
+    assert dto.price == 108000
+
+
 def test_parse_auction_price_falls_back_when_buy_now_amount_is_null() -> None:
     """KIA Soul: buyNowAvailable=false and buyNowAmount=null -> preliminaryPrice."""
     dto = parse_auction(_auction("search_page_1.json", "293855"))

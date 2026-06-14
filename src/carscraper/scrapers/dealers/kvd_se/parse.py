@@ -4,8 +4,8 @@
 single entry from kvd.se's `auctions` response array) into a `CarListingDTO`,
 per the field-mapping table in CAR-16. This is the normalization boundary
 described in CLAUDE.md: every kvd.se-specific shape (nested
-`processObject.properties`, `previewImages`, buy-now vs. preliminary pricing)
-is translated here and nowhere else.
+`processObject.properties`, `previewImages`, the leading-bid/starting-price/
+buy-now/valuation pricing fallback) is translated here and nowhere else.
 
 Parsing external data is a system boundary: if a raw entry is missing a field
 `CarListingDTO` requires (`id`, `auctionUrl`, `brand`, or a derivable `model`),
@@ -63,7 +63,18 @@ def _derive_variant(properties: dict, model: str) -> str | None:
 
 
 def _derive_price(raw: dict) -> int | None:
-    """`buyNowAmount` if buy-now is available, else `preliminaryPrice`."""
+    """Price, following kvd.se's own on-page price labels in priority order:
+
+    1. `winningBid` ("Ledande bud") - the current leading auction bid.
+    2. `startBid` ("Utgångspris") - the auction's starting price.
+    3. `buyNowAmount` ("Fast pris"), when buy-now is available.
+    4. `preliminaryPrice` ("Pris i bilhandeln") - KVD's market valuation, as a
+       last resort when none of the above are set.
+    """
+    if raw.get("winningBid") is not None:
+        return raw["winningBid"]
+    if raw.get("startBid") is not None:
+        return raw["startBid"]
     if raw.get("buyNowAvailable") and raw.get("buyNowAmount") is not None:
         return raw["buyNowAmount"]
     return raw.get("preliminaryPrice")
