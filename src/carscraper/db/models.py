@@ -36,8 +36,14 @@ class Dealer(Base):
     # "bilia_stockholm". Unique so it can be used as a stable reference.
     scraper_module: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Set when a ScrapeRun for this dealer finishes. Nullable until the first
+    # run completes.
+    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     listings: Mapped[list[CarListing]] = relationship(
+        back_populates="dealer", cascade="all, delete-orphan"
+    )
+    scrape_runs: Mapped[list[ScrapeRun]] = relationship(
         back_populates="dealer", cascade="all, delete-orphan"
     )
 
@@ -117,6 +123,9 @@ class CarListing(Base):
     price_snapshots: Mapped[list[PriceSnapshot]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
+    scrape_log_entries: Mapped[list[ScrapeLogEntry]] = relationship(
+        back_populates="listing", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (
@@ -151,4 +160,83 @@ class PriceSnapshot(Base):
         return (
             f"PriceSnapshot(id={self.id!r}, listing_id={self.listing_id!r}, "
             f"price={self.price!r}, scraped_at={self.scraped_at!r})"
+        )
+
+
+class ScrapeRun(Base):
+    """One row per dealer per scrape execution.
+
+    Records the lifecycle (running -> success/failed) and a summary of what
+    the run found/changed. Populated by CAR-12's persistence service; this
+    model only describes the shape.
+    """
+
+    __tablename__ = "scrape_runs"
+    __table_args__ = (
+        # Supports "latest run(s) for this dealer" queries.
+        Index("ix_scrape_runs_dealer_id_started_at", "dealer_id", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[int] = mapped_column(ForeignKey("dealers.id"), nullable=False)
+
+    # Lifecycle status, e.g. "running" / "success" / "failed".
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    # Null until the run finishes (success or failure).
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Set when status is "failed".
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    # Summary counts of listing changes observed during the run.
+    new_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    removed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unchanged_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    dealer: Mapped[Dealer] = relationship(back_populates="scrape_runs")
+    log_entries: Mapped[list[ScrapeLogEntry]] = relationship(
+        back_populates="scrape_run", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ScrapeRun(id={self.id!r}, dealer_id={self.dealer_id!r}, "
+            f"status={self.status!r}, started_at={self.started_at!r})"
+        )
+
+
+class ScrapeLogEntry(Base):
+    """One row per listing change observed during a ScrapeRun.
+
+    Drives the per-run audit trail (what was new/updated/removed) that CAR-13's
+    UI surfaces.
+    """
+
+    __tablename__ = "scrape_log_entries"
+    __table_args__ = (
+        # Supports "all changes for this run" queries.
+        Index("ix_scrape_log_entries_scrape_run_id", "scrape_run_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scrape_run_id: Mapped[int] = mapped_column(ForeignKey("scrape_runs.id"), nullable=False)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("car_listings.id"), nullable=False)
+
+    # The kind of change observed, e.g. "new" / "updated" / "removed".
+    change_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Price before/after the change. Both nullable: "new"/"removed" changes may
+    # only have one side, and a listing's price itself can be unknown.
+    old_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    new_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    scrape_run: Mapped[ScrapeRun] = relationship(back_populates="log_entries")
+    listing: Mapped[CarListing] = relationship(back_populates="scrape_log_entries")
+
+    def __repr__(self) -> str:
+        return (
+            f"ScrapeLogEntry(id={self.id!r}, scrape_run_id={self.scrape_run_id!r}, "
+            f"listing_id={self.listing_id!r}, change_type={self.change_type!r})"
         )
