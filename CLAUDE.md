@@ -168,6 +168,22 @@ implementations. To avoid repeating that:
 Planning happens up front and produces GitHub issues on
 [Braindrift/car-scraper](https://github.com/Braindrift/car-scraper).
 
+### Tickets-first policy (mandatory)
+
+**All implementation work must go through a GitHub ticket on
+`Braindrift/car-scraper` — create the issue first, then implement it (via
+`/batch` or otherwise).** This applies to features, refactors, schema/DB
+changes, and bug fixes alike. When the user describes work that isn't yet a
+ticket, the default response is to *draft the issue(s)* (title `CAR-<n>` +
+Definition of Done) and confirm, **not** to start editing code.
+
+The **only** exception is when the user explicitly says the work is ad-hoc —
+e.g. "do this ad-hoc", "skip the ticket", or "no ticket needed". Phrases like
+"let's refine this", "go ahead", or "can we add X" are *not* ad-hoc waivers;
+when in doubt, propose a ticket rather than assume. Trivial, non-code chores
+(answering questions, running existing commands, updating docs the user is
+actively editing) don't need a ticket.
+
 ### Ticket naming
 
 Every ticket is titled `CAR-<n> <Title>`, where `<n>` is the GitHub issue
