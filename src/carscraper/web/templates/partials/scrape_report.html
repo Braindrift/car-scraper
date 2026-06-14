@@ -1,0 +1,80 @@
+<div class="rounded border border-gray-200 bg-white p-4">
+  <div class="mb-3 flex items-center justify-between">
+    <h2 class="text-lg font-semibold">
+      {{ run.dealer.name }} — scrape report
+    </h2>
+    <span
+      class="rounded px-2 py-0.5 text-xs font-medium
+        {% if run.status == 'success' %}bg-green-100 text-green-700
+        {% elif run.status == 'failed' %}bg-red-100 text-red-700
+        {% else %}bg-gray-100 text-gray-700{% endif %}"
+    >
+      {{ run.status }}
+    </span>
+  </div>
+
+  <div class="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600 sm:grid-cols-4">
+    <div><span class="font-medium text-gray-900">{{ run.new_count }}</span> new</div>
+    <div><span class="font-medium text-gray-900">{{ run.updated_count }}</span> updated</div>
+    <div><span class="font-medium text-gray-900">{{ run.removed_count }}</span> removed</div>
+    <div><span class="font-medium text-gray-900">{{ run.unchanged_count }}</span> unchanged</div>
+  </div>
+
+  {% if run.started_at %}
+    <p class="mb-3 text-xs text-gray-500">
+      Started {{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}
+      {% if run.finished_at %} · finished {{ run.finished_at.strftime("%Y-%m-%d %H:%M:%S") }}{% endif %}
+    </p>
+  {% endif %}
+
+  {% if run.error_message %}
+    <div class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      {{ run.error_message }}
+    </div>
+  {% endif %}
+
+  {% if log_entries %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-200 text-left text-gray-500">
+          <th class="py-2 pr-4">Change</th>
+          <th class="py-2 pr-4">Listing</th>
+          <th class="py-2 pr-4">Old price</th>
+          <th class="py-2 pr-4">New price</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in log_entries %}
+          <tr class="border-b border-gray-100">
+            <td class="py-2 pr-4">
+              <span
+                class="rounded px-2 py-0.5 text-xs font-medium
+                  {% if entry.change_type == 'new' %}bg-green-100 text-green-700
+                  {% elif entry.change_type == 'updated' %}bg-blue-100 text-blue-700
+                  {% elif entry.change_type == 'removed' %}bg-amber-100 text-amber-700
+                  {% else %}bg-gray-100 text-gray-700{% endif %}"
+              >
+                {{ entry.change_type }}
+              </span>
+            </td>
+            <td class="py-2 pr-4">
+              {% if entry.listing %}
+                <a href="/listings/{{ entry.listing.id }}" class="text-blue-600 hover:underline">
+                  {{ entry.listing.make }} {{ entry.listing.model }}{% if entry.listing.variant %} {{ entry.listing.variant }}{% endif %}
+                </a>
+              {% else %}
+                <span class="text-gray-400">#{{ entry.listing_id }}</span>
+              {% endif %}
+            </td>
+            <td class="py-2 pr-4">{{ "{:,}".format(entry.old_price) if entry.old_price is not none else "—" }}</td>
+            <td class="py-2 pr-4">{{ "{:,}".format(entry.new_price) if entry.new_price is not none else "—" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="rounded border border-dashed border-gray-300 p-6 text-center text-gray-500">
+      No listing changes recorded for this run.
+    </div>
+  {% endif %}
+</div>

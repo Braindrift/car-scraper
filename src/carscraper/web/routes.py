@@ -17,6 +17,13 @@ from carscraper.services.listings import (
     list_car_listings,
     list_dealers_with_listings,
 )
+from carscraper.services.scrape_status import (
+    get_run_log_entries,
+    get_scrape_run,
+    launch_all_dealers_scrape,
+    launch_dealer_scrape,
+    list_dealer_scrape_status,
+)
 from carscraper.services.stats import avg_price_per_model, price_history
 from carscraper.services.tracked_models import (
     create_tracked_model,
@@ -222,4 +229,95 @@ def remove_tracked_model(request: Request, tracked_model_id: int) -> HTMLRespons
         request,
         "partials/tracked_models_list.html",
         {"tracked_models": tracked_models, "error": None},
+    )
+
+
+@router.get("/scrape", response_class=HTMLResponse)
+def scrape_page(request: Request) -> HTMLResponse:
+    """Render the scrape page: each dealer with its latest run status + controls.
+
+    The dealer rows live in a partial that HTMX polls (see
+    `scrape_dealers_status`) so a running scrape's spinner and the eventual
+    success/failed status update without a manual reload.
+    """
+    with get_session() as session:
+        dealer_statuses = list_dealer_scrape_status(session)
+
+    return templates.TemplateResponse(
+        request,
+        "scrape.html",
+        {"dealer_statuses": dealer_statuses},
+    )
+
+
+@router.get("/scrape/dealers", response_class=HTMLResponse)
+def scrape_dealers_status(request: Request) -> HTMLResponse:
+    """Render just the dealer-status list partial, for HTMX polling.
+
+    Returns the same `scrape_dealers.html` partial the page embeds, so the
+    poll can swap the list in place to reflect run progress/completion.
+    """
+    with get_session() as session:
+        dealer_statuses = list_dealer_scrape_status(session)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/scrape_dealers.html",
+        {"dealer_statuses": dealer_statuses},
+    )
+
+
+@router.post("/scrape/dealer/{dealer_id}", response_class=HTMLResponse)
+async def trigger_dealer_scrape(request: Request, dealer_id: int) -> HTMLResponse:
+    """Kick off a background scrape for one dealer and return the status list.
+
+    The scrape runs in the background (its `ScrapeRun` row tracks progress);
+    this returns immediately with the refreshed dealer-status partial, which
+    HTMX polling then keeps up to date.
+    """
+    launch_dealer_scrape(dealer_id)
+
+    with get_session() as session:
+        dealer_statuses = list_dealer_scrape_status(session)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/scrape_dealers.html",
+        {"dealer_statuses": dealer_statuses},
+    )
+
+
+@router.post("/scrape/all", response_class=HTMLResponse)
+async def trigger_all_scrape(request: Request) -> HTMLResponse:
+    """Kick off background scrapes for all enabled dealers; return status list."""
+    launch_all_dealers_scrape()
+
+    with get_session() as session:
+        dealer_statuses = list_dealer_scrape_status(session)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/scrape_dealers.html",
+        {"dealer_statuses": dealer_statuses},
+    )
+
+
+@router.get("/scrape/runs/{run_id}", response_class=HTMLResponse)
+def scrape_run_report(request: Request, run_id: int) -> HTMLResponse:
+    """Render a completed run's report: per-listing log entries + summary counts.
+
+    Returns a 404 if no run with `run_id` exists. The log entries carry their
+    related `CarListing` so the report can show make/model/url per change.
+    """
+    with get_session() as session:
+        run = get_scrape_run(session, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Scrape run not found")
+
+        log_entries = get_run_log_entries(session, run_id)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/scrape_report.html",
+        {"run": run, "log_entries": log_entries},
     )

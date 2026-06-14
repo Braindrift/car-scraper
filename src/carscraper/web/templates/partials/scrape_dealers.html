@@ -1,0 +1,87 @@
+{% if dealer_statuses %}
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-200 text-left text-gray-500">
+        <th class="py-2 pr-4">Dealer</th>
+        <th class="py-2 pr-4">Last scraped</th>
+        <th class="py-2 pr-4">Status</th>
+        <th class="py-2 pr-4"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in dealer_statuses %}
+        {% set run = item.latest_run %}
+        <tr class="border-b border-gray-100">
+          <td class="py-2 pr-4">
+            {{ item.dealer.name }}
+            {% if not item.dealer.enabled %}
+              <span class="ml-1 text-xs text-gray-400">(disabled)</span>
+            {% endif %}
+          </td>
+          <td class="py-2 pr-4">
+            {% if item.dealer.last_scraped_at %}
+              {{ item.dealer.last_scraped_at.strftime("%Y-%m-%d %H:%M") }}
+            {% else %}
+              <span class="text-gray-400">never</span>
+            {% endif %}
+          </td>
+          <td class="py-2 pr-4">
+            {% if run is none %}
+              <span class="text-gray-400">—</span>
+            {% elif run.status == "running" %}
+              <span class="inline-flex items-center gap-2 text-blue-600">
+                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Running…
+              </span>
+            {% elif run.status == "success" %}
+              <span class="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                Success
+              </span>
+              <span class="ml-1 text-xs text-gray-500">
+                +{{ run.new_count }} new / {{ run.updated_count }} updated / {{ run.removed_count }} removed
+              </span>
+            {% elif run.status == "failed" %}
+              <span class="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                Failed
+              </span>
+            {% else %}
+              <span class="text-gray-500">{{ run.status }}</span>
+            {% endif %}
+          </td>
+          <td class="py-2 pr-4 text-right">
+            <div class="flex items-center justify-end gap-2">
+              {% if run is not none and run.status != "running" %}
+                <button
+                  type="button"
+                  hx-get="/scrape/runs/{{ run.id }}"
+                  hx-target="#scrape-report"
+                  hx-swap="innerHTML"
+                  class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+                >
+                  View report
+                </button>
+              {% endif %}
+              <button
+                type="button"
+                hx-post="/scrape/dealer/{{ item.dealer.id }}"
+                hx-target="#scrape-dealers"
+                hx-swap="innerHTML"
+                {% if run is not none and run.status == "running" %}disabled{% endif %}
+                class="rounded bg-gray-900 px-2 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+              >
+                Scrape
+              </button>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+    No dealers configured yet.
+  </div>
+{% endif %}
