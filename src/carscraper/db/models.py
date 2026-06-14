@@ -116,6 +116,9 @@ class CarListing(Base):
         DateTime, nullable=False, server_default=func.now()
     )
     last_seen: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    # When the user last opened this listing's detail page. Null until first
+    # viewed; drives the dashboard NEW/UPDATED status badges (CAR-14).
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # False once a listing isn't seen in a scrape run (implies sold/removed).
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

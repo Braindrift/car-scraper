@@ -16,6 +16,8 @@ from carscraper.services.listings import (
     get_listing,
     list_car_listings,
     list_dealers_with_listings,
+    listing_statuses,
+    mark_listing_viewed,
 )
 from carscraper.services.scrape_status import (
     get_run_log_entries,
@@ -82,11 +84,17 @@ def dashboard(
     with get_session() as session:
         listings = list_car_listings(session, filters)
         dealers = list_dealers_with_listings(session)
+        statuses = listing_statuses(session, listings)
 
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"listings": listings, "dealers": dealers, "filters": filters},
+        {
+            "listings": listings,
+            "dealers": dealers,
+            "filters": filters,
+            "statuses": statuses,
+        },
     )
 
 
@@ -110,11 +118,12 @@ def listings_table(
 
     with get_session() as session:
         listings = list_car_listings(session, filters)
+        statuses = listing_statuses(session, listings)
 
     return templates.TemplateResponse(
         request,
         "partials/listings_table.html",
-        {"listings": listings},
+        {"listings": listings, "statuses": statuses},
     )
 
 
@@ -127,6 +136,9 @@ def listing_detail(request: Request, listing_id: int) -> HTMLResponse:
     `PriceSnapshot` rows yet, the chart renders with an empty series and a
     "no price history yet" message instead of erroring.
 
+    Viewing a listing records `last_viewed_at = now()` (CAR-14), which clears
+    its NEW/UPDATED badge on the next dashboard load.
+
     Returns a 404 if no listing with `listing_id` exists.
     """
     with get_session() as session:
@@ -134,6 +146,7 @@ def listing_detail(request: Request, listing_id: int) -> HTMLResponse:
         if listing is None:
             raise HTTPException(status_code=404, detail="Listing not found")
 
+        mark_listing_viewed(session, listing_id)
         history = price_history(session, listing_id)
 
     chart_labels = [point.scraped_at.isoformat() for point in history]

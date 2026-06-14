@@ -148,3 +148,28 @@ def test_dashboard_dealer_dropdown_lists_dealers(db_session: Session) -> None:
 
     assert response.status_code == 200
     assert "Bilia Stockholm" in response.text
+
+
+def test_dashboard_shows_new_badge_for_unviewed_listing(db_session: Session) -> None:
+    _seed_listing(db_session)  # never viewed -> NEW
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "NEW" in response.text
+
+
+def test_viewing_listing_clears_new_badge(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+
+    # Before viewing: NEW badge shown.
+    assert "NEW" in client.get("/").text
+
+    # Viewing the detail page records last_viewed_at.
+    detail = client.get(f"/listings/{listing.id}")
+    assert detail.status_code == 200
+
+    # On the next dashboard load the badge is gone (status reads SEEN -> date).
+    after = client.get("/")
+    assert "NEW" not in after.text
+    assert "UPDATED" not in after.text

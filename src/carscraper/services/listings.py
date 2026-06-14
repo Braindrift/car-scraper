@@ -9,12 +9,37 @@ filters, it returns the matching `CarListing` rows, most-recently-seen first.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from carscraper.db.models import CarListing, Dealer, PriceSnapshot
+from carscraper.db.models import (
+    CarListing,
+    Dealer,
+    PriceSnapshot,
+    ScrapeLogEntry,
+    ScrapeRun,
+)
+from carscraper.services.scrape_results import CHANGE_UPDATED
+
+# Dashboard status values for a listing relative to when the user last viewed
+# it (CAR-14). This is a service-level concept (the templates only render the
+# resulting value), mirroring how change-type constants live in
+# `services/scrape_results.py` rather than on the models.
+STATUS_NEW = "new"
+STATUS_UPDATED = "updated"
+STATUS_SEEN = "seen"
+
+
+def _now() -> datetime:
+    """Naive UTC timestamp, matching the models' `func.now()` columns.
+
+    The `DateTime` columns are timezone-naive (see
+    `services/scrape_results._now`), so service-set timestamps drop tzinfo to
+    compare cleanly against stored values.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass(frozen=True)
@@ -165,3 +190,74 @@ def add_price_snapshot(
     session.add(snapshot)
     session.commit()
     return snapshot
+
+
+def _listing_ids_updated_since_view(session: Session, listings: list[CarListing]) -> set[int]:
+    """Return ids of `listings` with a price change since the user last viewed.
+
+    A listing counts as updated when it has a `ScrapeLogEntry` with
+    `change_type="updated"` whose `ScrapeRun.finished_at` is later than the
+    listing's `last_viewed_at` (CAR-12 records one such entry per price change).
+    Listings never viewed (`last_viewed_at` is null) are reported NEW rather
+    than UPDATED, so they're excluded here.
+    """
+    candidates = {
+        listing.id: listing.last_viewed_at
+        for listing in listings
+        if listing.last_viewed_at is not None
+    }
+    if not candidates:
+        return set()
+
+    stmt = (
+        select(ScrapeLogEntry.listing_id, ScrapeRun.finished_at)
+        .join(ScrapeRun, ScrapeLogEntry.scrape_run_id == ScrapeRun.id)
+        .where(ScrapeLogEntry.listing_id.in_(candidates))
+        .where(ScrapeLogEntry.change_type == CHANGE_UPDATED)
+        .where(ScrapeRun.finished_at.is_not(None))
+    )
+
+    updated: set[int] = set()
+    for listing_id, finished_at in session.execute(stmt):
+        if finished_at is not None and finished_at > candidates[listing_id]:
+            updated.add(listing_id)
+    return updated
+
+
+def listing_statuses(session: Session, listings: list[CarListing]) -> dict[int, str]:
+    """Map each listing's id to its dashboard status (NEW / UPDATED / SEEN).
+
+    Rules (CAR-14):
+    - **NEW** — `last_viewed_at` is null, or `first_seen` is later than it.
+    - **UPDATED** — a price change (an "updated" `ScrapeLogEntry`) landed in a
+      `ScrapeRun` that finished after `last_viewed_at`.
+    - **SEEN** — otherwise; the caller renders `last_seen` as a plain date.
+
+    NEW takes precedence over UPDATED: an unseen listing is simply new.
+    """
+    updated_ids = _listing_ids_updated_since_view(session, listings)
+
+    statuses: dict[int, str] = {}
+    for listing in listings:
+        if listing.last_viewed_at is None or listing.first_seen > listing.last_viewed_at:
+            statuses[listing.id] = STATUS_NEW
+        elif listing.id in updated_ids:
+            statuses[listing.id] = STATUS_UPDATED
+        else:
+            statuses[listing.id] = STATUS_SEEN
+    return statuses
+
+
+def mark_listing_viewed(session: Session, listing_id: int) -> None:
+    """Record that the user just viewed `listing_id`, clearing its badge.
+
+    Sets `last_viewed_at = now()` and commits. A no-op (no commit) if the
+    listing doesn't exist, so callers can call this unconditionally on the
+    detail route. After this, the listing reads as SEEN on the next dashboard
+    load until a later scrape produces a fresh price change.
+    """
+    listing = session.get(CarListing, listing_id)
+    if listing is None:
+        return
+    listing.last_viewed_at = _now()
+    session.commit()
