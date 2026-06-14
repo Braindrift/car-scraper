@@ -52,3 +52,4 @@ target-version = ["py312"]
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra"
+asyncio_mode = "auto"
