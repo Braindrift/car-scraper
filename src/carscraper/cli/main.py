@@ -11,6 +11,7 @@ import asyncio
 import typer
 
 from carscraper.db.session import get_session
+from carscraper.services.demo_data import seed_demo_data
 from carscraper.services.scrape_runner import run_enabled_dealers
 
 app = typer.Typer(help="CarScraper 2.0 command-line interface.")
@@ -41,6 +42,37 @@ def run_scrape(
 
     typer.echo(
         f"{result.dealers_scraped} dealer(s) scraped, {len(result.listings)} listing(s) found"
+    )
+
+
+@app.command("seed-demo-data")
+def seed_demo_data_command(
+    reset: bool = typer.Option(
+        False,
+        "--reset",
+        help="Wipe any previously-seeded demo rows before reseeding.",
+    ),
+) -> None:
+    """**Dev/demo-only.** Populate the database with fake dealers, tracked
+    models, listings, and price history.
+
+    This exists so the dashboard (listings table, tracked-model config,
+    stats, and price-history charts) can be visually checked end to end
+    without running a real scraper. It does not touch any real scraped data.
+
+    Without `--reset`, this is idempotent: if demo data already exists, it
+    reports the existing counts and makes no further changes. With
+    `--reset`, any previously-seeded demo rows are deleted first and the
+    database is reseeded from scratch.
+    """
+    with get_session() as session:
+        summary = seed_demo_data(session, reset=reset)
+
+    action = "Reseeded" if summary.reset else "Seeded (or found existing)"
+    typer.echo(
+        f"{action} demo data: {summary.dealers} dealer(s), "
+        f"{summary.tracked_models} tracked model(s), {summary.listings} listing(s), "
+        f"{summary.price_snapshots} price snapshot(s)"
     )
 
 

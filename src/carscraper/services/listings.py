@@ -9,11 +9,12 @@ filters, it returns the matching `CarListing` rows, most-recently-seen first.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from carscraper.db.models import CarListing, Dealer
+from carscraper.db.models import CarListing, Dealer, PriceSnapshot
 
 
 @dataclass(frozen=True)
@@ -93,3 +94,74 @@ def list_dealers_with_listings(session: Session) -> list[Dealer]:
         .order_by(Dealer.name)
     )
     return list(session.execute(stmt).scalars().all())
+
+
+def create_car_listing(
+    session: Session,
+    dealer_id: int,
+    external_id: str,
+    url: str,
+    make: str,
+    model: str,
+    variant: str | None = None,
+    year: int | None = None,
+    mileage: int | None = None,
+    price: int | None = None,
+    fuel_type: str | None = None,
+    transmission: str | None = None,
+    first_seen: datetime | None = None,
+    last_seen: datetime | None = None,
+    active: bool = True,
+) -> CarListing:
+    """Create and persist a new `CarListing` row.
+
+    `(dealer_id, external_id)` should be unique (the natural key for a
+    listing on a dealer's site); callers are responsible for avoiding
+    duplicates. `first_seen`/`last_seen` default to the column defaults
+    (now) if not provided.
+    """
+    kwargs: dict[str, object] = {
+        "dealer_id": dealer_id,
+        "external_id": external_id,
+        "url": url,
+        "make": make,
+        "model": model,
+        "variant": variant,
+        "year": year,
+        "mileage": mileage,
+        "price": price,
+        "fuel_type": fuel_type,
+        "transmission": transmission,
+        "active": active,
+    }
+    if first_seen is not None:
+        kwargs["first_seen"] = first_seen
+    if last_seen is not None:
+        kwargs["last_seen"] = last_seen
+
+    listing = CarListing(**kwargs)
+    session.add(listing)
+    session.commit()
+    return listing
+
+
+def add_price_snapshot(
+    session: Session,
+    listing_id: int,
+    price: int,
+    scraped_at: datetime | None = None,
+) -> PriceSnapshot:
+    """Create and persist a new `PriceSnapshot` row for `listing_id`.
+
+    `scraped_at` defaults to the column default (now) if not provided; pass
+    an explicit value (e.g. to seed historical price points for the
+    price-history chart).
+    """
+    kwargs: dict[str, object] = {"listing_id": listing_id, "price": price}
+    if scraped_at is not None:
+        kwargs["scraped_at"] = scraped_at
+
+    snapshot = PriceSnapshot(**kwargs)
+    session.add(snapshot)
+    session.commit()
+    return snapshot
