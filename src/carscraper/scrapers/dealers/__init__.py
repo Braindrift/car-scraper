@@ -9,3 +9,6 @@ from __future__ import annotations
 
 # Dev/demo-only simulated scrapers (registered under the `demo_*` slugs).
 from carscraper.scrapers.dealers import demo as _demo  # noqa: F401
+
+# kvd.se: real dealer scraper (CAR-16), registered under "kvd_se".
+from carscraper.scrapers.dealers import kvd_se as _kvd_se  # noqa: F401

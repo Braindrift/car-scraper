@@ -1,0 +1,101 @@
+{
+  "auctions": [
+    {
+      "id": "293430",
+      "auctionUrl": "https://www.kvd.se/fast-pris/ford-focus-1-0t-ecoboost-5dr-125hk-293430",
+      "buyNowAmount": 159900,
+      "buyNowAvailable": true,
+      "preliminaryPrice": null,
+      "previewImages": [
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280498/d6a4411f.jpg",
+          "order": 1
+        },
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280498/026786b1.jpg",
+          "order": 2
+        }
+      ],
+      "processObject": {
+        "id": "7280498",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "Ford",
+          "familyName": "Focus",
+          "modelName": "Focus 1.0T EcoBoost 5dr (125hk)",
+          "modelYear": 2020,
+          "odometerReading": 51490,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": null,
+          "fuels": [
+            {
+              "fuelCode": "Petrol",
+              "enginePower": 125,
+              "co2": 116,
+              "consumption": 5.1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "_comment": "Synthetic (CAR-16): no real entry found without previewImages within the first ~200 listings. Minimal, hand-constructed to exercise the no-images fallback (image_urls == []).",
+      "id": "999001",
+      "auctionUrl": "https://www.kvd.se/fast-pris/synthetic-no-images-999001",
+      "buyNowAmount": 99900,
+      "buyNowAvailable": true,
+      "preliminaryPrice": null,
+      "processObject": {
+        "id": "8000001",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "Toyota",
+          "familyName": "Corolla",
+          "modelName": "Corolla 1.8 Hybrid (122hk)",
+          "modelYear": 2019,
+          "odometerReading": 72000,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": "Hybrid",
+          "fuels": [
+            {
+              "fuelCode": "Petrol",
+              "enginePower": 122
+            }
+          ]
+        }
+      }
+    },
+    {
+      "_comment": "Synthetic (CAR-16): EV with no buyNowAmount/buyNowAvailable (price falls back to preliminaryPrice) and an empty `fuels` array, so fuel_type falls back to electricType.",
+      "id": "999002",
+      "auctionUrl": "https://www.kvd.se/auktioner/synthetic-ev-no-fuels-999002",
+      "buyNowAmount": null,
+      "buyNowAvailable": false,
+      "preliminaryPrice": 415000,
+      "previewImage": "https://kvdbil-images.imgix.net/8000002/cover.jpg",
+      "processObject": {
+        "id": "8000002",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "Polestar",
+          "familyName": "2",
+          "modelName": "2 Long Range Single Motor",
+          "modelYear": 2022,
+          "odometerReading": 38000,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": "Electric",
+          "fuels": []
+        }
+      }
+    }
+  ],
+  "hits": 719,
+  "total": 948,
+  "vehicleTypeHits": {
+    "car": 701
+  },
+  "carGuideAuctions": {}
+}

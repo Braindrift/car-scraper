@@ -139,6 +139,10 @@ implementations. To avoid repeating that:
   saved pages from that dealer's site. Tests run the scraper's parsing logic
   against these fixtures, not against the live site. When a dealer changes
   their site and the scraper breaks, update the fixture + scraper together.
+  **JSON-API dealers** (e.g. `kvd_se`, which scrapes a JSON HTTP API rather
+  than HTML) use `tests/scrapers/<dealer_slug>/fixtures/*.json` instead —
+  saved/trimmed API responses, with the same fixture-drift contract: if the
+  dealer's API response shape changes, update the fixture + scraper together.
 - **Adding a new dealer** (high-level — a dedicated slash command will
   formalize this later):
   1. Save sample HTML from the dealer's listing/search pages as fixtures.

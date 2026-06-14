@@ -1,0 +1,174 @@
+{
+  "auctions": [
+    {
+      "id": "293977",
+      "auctionUrl": "https://www.kvd.se/auktioner/porsche-taycan-4-cross-turismo-435hk-293977",
+      "buyNowAmount": 1059900,
+      "buyNowAvailable": false,
+      "preliminaryPrice": 1100000,
+      "previewImages": [
+        {
+          "uri": "https://kvdbil-images.imgix.net/7276234/e3eaadb3.jpg",
+          "order": 1
+        },
+        {
+          "uri": "https://kvdbil-images.imgix.net/7276234/ab6f0df5.jpg",
+          "order": 2
+        }
+      ],
+      "processObject": {
+        "id": "7276234",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "Porsche",
+          "familyName": "Taycan",
+          "modelName": "Taycan 4 Cross Turismo (435hk)",
+          "modelYear": 2025,
+          "odometerReading": 19950,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": "Electric",
+          "fuels": [
+            {
+              "fuelCode": "Electric",
+              "enginePower": 435,
+              "rangeWltpDrive": 590,
+              "rangeCityWltpDrive": 676,
+              "energyConsumptionWltpDrive": 195
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "293910",
+      "auctionUrl": "https://www.kvd.se/fast-pris/kia-niro-plug-in-hybrid-1-6-141hk-293910",
+      "buyNowAmount": 223800,
+      "buyNowAvailable": true,
+      "preliminaryPrice": null,
+      "previewImages": [
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280874/57c78083.jpg",
+          "order": 1
+        },
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280874/e33a44a7.jpg",
+          "order": 2
+        }
+      ],
+      "processObject": {
+        "id": "7280874",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "KIA",
+          "familyName": "Niro",
+          "modelName": "Niro Plug-in Hybrid 1.6 (141hk)",
+          "modelYear": 2021,
+          "odometerReading": 65000,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": "Plug-in hybrid",
+          "fuels": [
+            {
+              "fuelCode": "Petrol",
+              "enginePower": 105
+            },
+            {
+              "fuelCode": "Electric",
+              "enginePower": 61,
+              "rangeWltpDrive": 49,
+              "rangeCityWltpDrive": 65
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "293659",
+      "auctionUrl": "https://www.kvd.se/fast-pris/mercedes-benz-a-klass-a-250-e-5dr-w177-218hk-293659",
+      "buyNowAmount": 224800,
+      "buyNowAvailable": true,
+      "preliminaryPrice": null,
+      "previewImages": [
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280837/3d53e65c.jpg",
+          "order": 1
+        },
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280837/e8561a46.jpg",
+          "order": 2
+        }
+      ],
+      "processObject": {
+        "id": "7280837",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "Mercedes",
+          "familyName": "A-Klass",
+          "modelName": "A 250 e 8G-DCT 218hk",
+          "modelYear": 2021,
+          "odometerReading": 109390,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": "Plug-in hybrid",
+          "fuels": [
+            {
+              "fuelCode": "Petrol",
+              "enginePower": 160
+            },
+            {
+              "fuelCode": "Electric",
+              "enginePower": 102,
+              "rangeWltpDrive": 71,
+              "rangeCityWltpDrive": 76
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "293855",
+      "auctionUrl": "https://www.kvd.se/auktioner/kia-soul-ev-110hk-293855",
+      "buyNowAmount": null,
+      "buyNowAvailable": false,
+      "preliminaryPrice": 130000,
+      "previewImages": [
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280376/b295cf21.jpg",
+          "order": 1
+        },
+        {
+          "uri": "https://kvdbil-images.imgix.net/7280376/ca325666.jpg",
+          "order": 2
+        }
+      ],
+      "processObject": {
+        "id": "7280376",
+        "vehicleType": "CAR",
+        "properties": {
+          "brand": "KIA",
+          "familyName": "Soul",
+          "modelName": "Soul EV (110hk)",
+          "modelYear": 2017,
+          "odometerReading": 46280,
+          "odometerUnit": "km",
+          "gearbox": "Automatic",
+          "electricType": "Electric",
+          "fuels": [
+            {
+              "fuelCode": "Electric",
+              "enginePower": 111,
+              "rangeNedcDrive": 212
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "hits": 719,
+  "total": 948,
+  "vehicleTypeHits": {
+    "car": 701
+  },
+  "carGuideAuctions": {}
+}
