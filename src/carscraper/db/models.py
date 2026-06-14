@@ -129,11 +129,51 @@ class CarListing(Base):
     scrape_log_entries: Mapped[list[ScrapeLogEntry]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
+    images: Mapped[list[ListingImage]] = relationship(
+        back_populates="listing",
+        cascade="all, delete-orphan",
+        order_by="ListingImage.position",
+    )
 
     def __repr__(self) -> str:
         return (
             f"CarListing(id={self.id!r}, dealer_id={self.dealer_id!r}, "
             f"make={self.make!r}, model={self.model!r}, active={self.active!r})"
+        )
+
+
+class ListingImage(Base):
+    """One downloaded image for a `CarListing`, used by the detail carousel.
+
+    Images are downloaded to local static storage by `services/images.py`;
+    `local_path` is the path *relative to the web static root*
+    (`web/static/`), e.g. ``images/<dealer_slug>/<external_id>/0.jpg``, so it
+    can be served directly under the app's ``/static`` mount. `position`
+    orders the images within a listing's carousel.
+    """
+
+    __tablename__ = "listing_images"
+    __table_args__ = (
+        # A listing's images are addressed by their position; keep them unique
+        # so re-downloads don't create duplicate rows for the same slot.
+        UniqueConstraint("listing_id", "position", name="uq_listing_images_listing_position"),
+        # Supports "all images for this listing, in order" queries.
+        Index("ix_listing_images_listing_id_position", "listing_id", "position"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("car_listings.id"), nullable=False)
+    # Path relative to the web static root (web/static/), forward-slashed.
+    local_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Ordering within the listing's carousel; 0-based.
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    listing: Mapped[CarListing] = relationship(back_populates="images")
+
+    def __repr__(self) -> str:
+        return (
+            f"ListingImage(id={self.id!r}, listing_id={self.listing_id!r}, "
+            f"position={self.position!r}, local_path={self.local_path!r})"
         )
 
 

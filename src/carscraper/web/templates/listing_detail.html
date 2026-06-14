@@ -13,6 +13,74 @@
     </a>
   </p>
 
+  {% if listing.images %}
+    <div
+      id="image-carousel"
+      class="mb-6 max-w-2xl rounded border border-gray-200 bg-white p-2"
+      data-image-count="{{ listing.images | length }}"
+    >
+      <div class="relative">
+        {% for image in listing.images %}
+          <img
+            src="/static/{{ image.local_path }}"
+            alt="{{ listing.make }} {{ listing.model }} — image {{ loop.index }}"
+            class="carousel-slide w-full rounded object-contain{% if not loop.first %} hidden{% endif %}"
+            data-slide-index="{{ loop.index0 }}"
+          />
+        {% endfor %}
+
+        {% if listing.images | length > 1 %}
+          <button
+            type="button"
+            id="carousel-prev"
+            class="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-1 text-white hover:bg-black/70"
+            aria-label="Previous image"
+          >&#8592;</button>
+          <button
+            type="button"
+            id="carousel-next"
+            class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-1 text-white hover:bg-black/70"
+            aria-label="Next image"
+          >&#8594;</button>
+        {% endif %}
+      </div>
+
+      {% if listing.images | length > 1 %}
+        <p class="mt-2 text-center text-sm text-gray-500">
+          <span id="carousel-position">1</span> / {{ listing.images | length }}
+        </p>
+      {% endif %}
+    </div>
+
+    <script>
+      (function () {
+        const carousel = document.getElementById("image-carousel");
+        if (!carousel) return;
+        const slides = Array.from(carousel.querySelectorAll(".carousel-slide"));
+        const indicator = document.getElementById("carousel-position");
+        let current = 0;
+
+        function show(index) {
+          current = (index + slides.length) % slides.length;
+          slides.forEach((slide, i) => slide.classList.toggle("hidden", i !== current));
+          if (indicator) indicator.textContent = String(current + 1);
+        }
+
+        const prev = document.getElementById("carousel-prev");
+        const next = document.getElementById("carousel-next");
+        if (prev) prev.addEventListener("click", () => show(current - 1));
+        if (next) next.addEventListener("click", () => show(current + 1));
+      })();
+    </script>
+  {% else %}
+    <div
+      id="image-carousel-empty"
+      class="mb-6 flex max-w-2xl items-center justify-center rounded border border-dashed border-gray-300 bg-white p-12 text-gray-400"
+    >
+      No images available
+    </div>
+  {% endif %}
+
   <table class="mb-6 w-full max-w-md text-sm">
     <tbody>
       <tr class="border-b border-gray-100">

@@ -49,6 +49,7 @@ from carscraper.db.models import (
 )
 from carscraper.scrapers.base import CarListingDTO
 from carscraper.scrapers.registry import run_scraper
+from carscraper.services.images import download_listing_images
 
 # ScrapeRun.status values.
 STATUS_RUNNING = "running"
@@ -155,7 +156,7 @@ def persist_scrape_results(
 
         if listing is None:
             listing = CarListing(
-                dealer_id=dealer.id,
+                dealer=dealer,
                 external_id=dto.external_id,
                 url=dto.url,
                 make=dto.make,
@@ -184,6 +185,8 @@ def persist_scrape_results(
                     new_price=dto.price,
                 )
             )
+            # Download any images the DTO carries (idempotent — no-op if none).
+            download_listing_images(session, listing, dto.image_urls)
             continue
 
         old_price = listing.price
@@ -191,6 +194,8 @@ def persist_scrape_results(
         listing.last_seen = now
         # A listing that had gone inactive but is seen again is reactivated.
         listing.active = True
+        # Pull in any newly-published images (idempotent for already-stored ones).
+        download_listing_images(session, listing, dto.image_urls)
 
         if dto.price != old_price:
             listing.price = dto.price

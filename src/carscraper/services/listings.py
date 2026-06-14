@@ -100,7 +100,7 @@ def get_listing(session: Session, listing_id: int) -> CarListing | None:
     """
     stmt = (
         select(CarListing)
-        .options(selectinload(CarListing.dealer))
+        .options(selectinload(CarListing.dealer), selectinload(CarListing.images))
         .where(CarListing.id == listing_id)
     )
     return session.execute(stmt).scalar_one_or_none()

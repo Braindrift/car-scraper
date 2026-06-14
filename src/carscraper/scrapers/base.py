@@ -54,6 +54,12 @@ class CarListingDTO(BaseModel):
     fuel_type: str | None = None
     transmission: str | None = None
 
+    # Remote image URLs from the dealer's site, in display order. Populated by
+    # real dealer scrapers (step 3); `services/images.py` downloads these to
+    # local static storage when a listing is persisted. Empty by default —
+    # a listing with no images is valid (renders a placeholder in the UI).
+    image_urls: list[str] = Field(default_factory=list)
+
 
 class BaseScraper(ABC):
     """Interface implemented by each dealer's scraper module.

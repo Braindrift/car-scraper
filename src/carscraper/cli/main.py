@@ -72,7 +72,7 @@ def seed_demo_data_command(
     typer.echo(
         f"{action} demo data: {summary.dealers} dealer(s), "
         f"{summary.tracked_models} tracked model(s), {summary.listings} listing(s), "
-        f"{summary.price_snapshots} price snapshot(s)"
+        f"{summary.price_snapshots} price snapshot(s), {summary.images} image(s)"
     )
 
 

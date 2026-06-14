@@ -21,13 +21,16 @@ All rows created here are tagged so they can be identified and removed:
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import Dealer, TrackedModel
+from carscraper.config import settings
+from carscraper.db.models import CarListing, Dealer, ListingImage, TrackedModel
 from carscraper.services.dealers import create_dealer, get_dealer_by_scraper_module
 from carscraper.services.listings import add_price_snapshot, create_car_listing
 from carscraper.services.tracked_models import create_tracked_model
@@ -35,6 +38,12 @@ from carscraper.services.tracked_models import create_tracked_model
 # Prefix used for every demo dealer's `scraper_module`, so demo rows can be
 # identified and cleared independently of any real dealer configuration.
 _DEMO_DEALER_PREFIX = "demo_"
+
+# Locally-bundled sample images, copied (never downloaded) into the static
+# images tree so seeding/tests stay network-free. Cycled across the demo
+# listings that get images (see `_LISTING_IMAGE_COUNTS`).
+_DEMO_ASSETS_DIR = Path(__file__).resolve().parent / "demo_assets"
+_DEMO_IMAGE_FILES = ["sample_1.png", "sample_2.png", "sample_3.png"]
 
 _DEALERS = [
     {
@@ -213,6 +222,18 @@ _LISTINGS = [
 ]
 
 
+# How many sample images each demo listing gets, keyed by external_id. A few
+# listings get multiple images (to exercise carousel prev/next), one gets a
+# single image, and the rest are left imageless (to exercise the "no images"
+# placeholder). Listings not listed here get zero images.
+_LISTING_IMAGE_COUNTS = {
+    "demo-1001": 3,
+    "demo-1002": 2,
+    "demo-2001": 3,
+    "demo-3001": 1,
+}
+
+
 @dataclass(frozen=True)
 class SeedSummary:
     """Row counts after seeding, for the CLI to report."""
@@ -221,6 +242,7 @@ class SeedSummary:
     tracked_models: int
     listings: int
     price_snapshots: int
+    images: int
     reset: bool
 
 
@@ -228,9 +250,35 @@ def _demo_dealer_slugs() -> set[str]:
     return {d["scraper_module"] for d in _DEALERS}
 
 
+def _seed_listing_images(listing: CarListing, dealer_slug: str, count: int) -> int:
+    """Copy `count` bundled sample images for `listing` and add rows.
+
+    Mirrors `services/images.py`'s on-disk layout
+    (``<static_root>/images/<slug>/<external_id>/<n>.<ext>``) and stores the
+    same static-root-relative `local_path`, but copies from locally-bundled
+    files instead of downloading — so seeding stays network-free. Returns the
+    number of images created.
+    """
+    if count <= 0:
+        return 0
+
+    target_dir = settings.static_root / "images" / dealer_slug / listing.external_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for position in range(count):
+        source = _DEMO_ASSETS_DIR / _DEMO_IMAGE_FILES[position % len(_DEMO_IMAGE_FILES)]
+        ext = source.suffix.lstrip(".")
+        file_path = target_dir / f"{position}.{ext}"
+        shutil.copyfile(source, file_path)
+        local_path = file_path.relative_to(settings.static_root).as_posix()
+        listing.images.append(ListingImage(local_path=local_path, position=position))
+
+    return count
+
+
 def _clear_demo_data(session: Session) -> None:
-    """Delete all demo dealers (and their listings/snapshots via cascade)
-    and demo tracked models.
+    """Delete all demo dealers (and their listings/snapshots/images via
+    cascade) and demo tracked models, plus the demo image files on disk.
 
     Used by `reset=True` to wipe previously-seeded demo rows before
     reseeding from scratch.
@@ -239,6 +287,10 @@ def _clear_demo_data(session: Session) -> None:
         dealer = get_dealer_by_scraper_module(session, slug)
         if dealer is not None:
             session.delete(dealer)
+        # Remove the dealer's static image tree so reseeding starts clean.
+        dealer_image_dir = settings.static_root / "images" / slug
+        if dealer_image_dir.exists():
+            shutil.rmtree(dealer_image_dir)
 
     for tm in _TRACKED_MODELS:
         stmt = select(TrackedModel).where(
@@ -267,6 +319,7 @@ def _current_counts(session: Session) -> SeedSummary:
     ]
     listing_count = sum(len(d.listings) for d in dealers)
     snapshot_count = sum(len(listing.price_snapshots) for d in dealers for listing in d.listings)
+    image_count = sum(len(listing.images) for d in dealers for listing in d.listings)
 
     tracked_count = 0
     for tm in _TRACKED_MODELS:
@@ -283,6 +336,7 @@ def _current_counts(session: Session) -> SeedSummary:
         tracked_models=tracked_count,
         listings=listing_count,
         price_snapshots=snapshot_count,
+        images=image_count,
         reset=False,
     )
 
@@ -326,6 +380,7 @@ def seed_demo_data(session: Session, reset: bool = False) -> SeedSummary:
     # server defaults (which on SQLite are naive UTC).
     now = datetime.now(UTC).replace(tzinfo=None)
     snapshot_count = 0
+    image_count = 0
     for listing_data in _LISTINGS:
         dealer = dealers[listing_data["dealer"]]
         history = listing_data["price_history"]
@@ -364,10 +419,16 @@ def seed_demo_data(session: Session, reset: bool = False) -> SeedSummary:
             )
             snapshot_count += 1
 
+        wanted_images = _LISTING_IMAGE_COUNTS.get(listing_data["external_id"], 0)
+        if wanted_images:
+            image_count += _seed_listing_images(listing, dealer.scraper_module, wanted_images)
+            session.commit()
+
     return SeedSummary(
         dealers=len(dealers),
         tracked_models=len(_TRACKED_MODELS),
         listings=len(_LISTINGS),
         price_snapshots=snapshot_count,
+        images=image_count,
         reset=reset,
     )

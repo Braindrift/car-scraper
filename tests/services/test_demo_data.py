@@ -16,16 +16,26 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import CarListing, Dealer, PriceSnapshot, TrackedModel
+from carscraper.config import settings
+from carscraper.db.models import CarListing, Dealer, ListingImage, PriceSnapshot, TrackedModel
 from carscraper.db.session import Base, create_db_engine
-from carscraper.services.demo_data import _DEALERS, _LISTINGS, _TRACKED_MODELS, seed_demo_data
+from carscraper.services.demo_data import (
+    _DEALERS,
+    _LISTING_IMAGE_COUNTS,
+    _LISTINGS,
+    _TRACKED_MODELS,
+    seed_demo_data,
+)
 
 
 @pytest.fixture
-def session(tmp_path) -> Generator[Session, None, None]:
+def session(tmp_path, monkeypatch) -> Generator[Session, None, None]:
     db_path = tmp_path / "demo_data_test.db"
     engine = create_db_engine(f"sqlite:///{db_path}")
     Base.metadata.create_all(engine)
+
+    # Seed images into a temp static root, never the package's static tree.
+    monkeypatch.setattr(settings, "static_root", tmp_path / "static")
 
     with Session(engine) as session:
         yield session
@@ -38,6 +48,7 @@ def _count(session: Session, model: type) -> int:
 
 
 _EXPECTED_SNAPSHOTS = sum(len(listing["price_history"]) for listing in _LISTINGS)
+_EXPECTED_IMAGES = sum(_LISTING_IMAGE_COUNTS.values())
 
 
 def test_seed_demo_data_populates_expected_counts(session: Session) -> None:
@@ -47,11 +58,33 @@ def test_seed_demo_data_populates_expected_counts(session: Session) -> None:
     assert summary.tracked_models == len(_TRACKED_MODELS)
     assert summary.listings == len(_LISTINGS)
     assert summary.price_snapshots == _EXPECTED_SNAPSHOTS
+    assert summary.images == _EXPECTED_IMAGES
 
     assert _count(session, Dealer) == len(_DEALERS)
     assert _count(session, TrackedModel) == len(_TRACKED_MODELS)
     assert _count(session, CarListing) == len(_LISTINGS)
     assert _count(session, PriceSnapshot) == _EXPECTED_SNAPSHOTS
+    assert _count(session, ListingImage) == _EXPECTED_IMAGES
+
+
+def test_seed_demo_data_writes_image_files(session: Session) -> None:
+    seed_demo_data(session)
+
+    images = session.execute(select(ListingImage)).scalars().all()
+    assert images  # at least some images were seeded
+    # Every ListingImage row's local file exists under the static root, and the
+    # files come from bundled assets (network-free seeding).
+    for image in images:
+        file_path = settings.static_root / image.local_path
+        assert file_path.is_file()
+        assert file_path.stat().st_size > 0
+
+
+def test_seed_demo_data_reset_does_not_accumulate_images(session: Session) -> None:
+    seed_demo_data(session)
+    seed_demo_data(session, reset=True)
+
+    assert _count(session, ListingImage) == _EXPECTED_IMAGES
 
 
 def test_seed_demo_data_is_idempotent_without_reset(session: Session) -> None:

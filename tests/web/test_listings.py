@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import CarListing, Dealer
+from carscraper.db.models import CarListing, Dealer, ListingImage
 from carscraper.db.session import Base, SessionLocal, create_db_engine
 from carscraper.main import app
 
@@ -61,6 +61,62 @@ def _seed_listing(session: Session) -> CarListing:
     session.add(listing)
     session.commit()
     return listing
+
+
+def _add_images(session: Session, listing: CarListing, count: int) -> None:
+    for position in range(count):
+        session.add(
+            ListingImage(
+                listing_id=listing.id,
+                local_path=f"images/bilia/{listing.external_id}/{position}.png",
+                position=position,
+            )
+        )
+    session.commit()
+
+
+def test_listing_detail_renders_carousel_with_images(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+    _add_images(db_session, listing, 3)
+
+    response = client.get(f"/listings/{listing.id}")
+
+    assert response.status_code == 200
+    assert 'id="image-carousel"' in response.text
+    # All three images are rendered, in order, served from /static.
+    assert "/static/images/bilia/1/0.png" in response.text
+    assert "/static/images/bilia/1/1.png" in response.text
+    assert "/static/images/bilia/1/2.png" in response.text
+    # Multiple images -> prev/next controls and a position indicator.
+    assert 'id="carousel-prev"' in response.text
+    assert 'id="carousel-next"' in response.text
+    assert 'id="carousel-position"' in response.text
+    assert "No images available" not in response.text
+
+
+def test_listing_detail_single_image_has_no_nav(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+    _add_images(db_session, listing, 1)
+
+    response = client.get(f"/listings/{listing.id}")
+
+    assert response.status_code == 200
+    assert 'id="image-carousel"' in response.text
+    assert "/static/images/bilia/1/0.png" in response.text
+    # A single image needs no prev/next controls or indicator.
+    assert 'id="carousel-prev"' not in response.text
+    assert 'id="carousel-next"' not in response.text
+
+
+def test_listing_detail_renders_placeholder_without_images(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+
+    response = client.get(f"/listings/{listing.id}")
+
+    assert response.status_code == 200
+    assert "No images available" in response.text
+    assert 'id="image-carousel"' not in response.text
+    assert 'id="carousel-next"' not in response.text
 
 
 def test_dashboard_empty_state(db_session: Session) -> None:

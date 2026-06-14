@@ -19,9 +19,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from carscraper.config import settings
 from carscraper.db.models import (
     CarListing,
     Dealer,
+    ListingImage,
     PriceSnapshot,
     ScrapeLogEntry,
     TrackedModel,
@@ -92,7 +94,15 @@ def _track(session: Session, make: str, model: str, variant: str | None = None) 
     session.commit()
 
 
-def _dto(external_id: str, *, price: int | None, make="Volvo", model="V70", variant=None):
+def _dto(
+    external_id: str,
+    *,
+    price: int | None,
+    make="Volvo",
+    model="V70",
+    variant=None,
+    image_urls: list[str] | None = None,
+):
     return CarListingDTO(
         external_id=external_id,
         url=f"https://example.com/{external_id}",
@@ -100,6 +110,7 @@ def _dto(external_id: str, *, price: int | None, make="Volvo", model="V70", vari
         model=model,
         variant=variant,
         price=price,
+        image_urls=image_urls or [],
     )
 
 
@@ -360,3 +371,68 @@ async def test_missing_scraper_registration_results_in_failed_run(session: Sessi
     assert run.status == STATUS_FAILED
     assert run.error_message is not None
     assert dealer.last_scraped_at is None
+
+
+# --- image download wiring (CAR-15) -----------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, content: bytes) -> None:
+        self.content = content
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class _FakeClient:
+    """Records requests; constructed by `download_listing_images` (no network)."""
+
+    requested: list[str] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def get(self, url: str) -> _FakeResponse:
+        _FakeClient.requested.append(url)
+        return _FakeResponse(b"fake-image-bytes")
+
+    def close(self) -> None:
+        return None
+
+
+async def test_persist_downloads_dto_images(session, tmp_path, monkeypatch) -> None:
+    # Route downloads to a temp static root and stub out the HTTP client so no
+    # real network call happens.
+    monkeypatch.setattr(settings, "static_root", tmp_path / "static")
+    monkeypatch.setattr("carscraper.services.images.httpx.Client", _FakeClient)
+    _FakeClient.requested = []
+
+    dealer = _make_dealer(session)
+    _track(session, "Volvo", "V70")
+    urls = ["https://img.example/a.jpg", "https://img.example/b.jpg"]
+    _set_scrape([_dto("v70-1", price=189000, image_urls=urls)])
+
+    await scrape_and_persist_dealer(session, dealer)
+
+    listing = session.execute(select(CarListing)).scalar_one()
+    images = (
+        session.execute(
+            select(ListingImage)
+            .where(ListingImage.listing_id == listing.id)
+            .order_by(ListingImage.position)
+        )
+        .scalars()
+        .all()
+    )
+    assert [img.position for img in images] == [0, 1]
+    assert _FakeClient.requested == urls
+    # The files were written under the temp static root.
+    for img in images:
+        assert (settings.static_root / img.local_path).is_file()
+
+    # Re-running with the same images doesn't re-download (idempotent wiring).
+    _FakeClient.requested = []
+    _set_scrape([_dto("v70-1", price=189000, image_urls=urls)])
+    await scrape_and_persist_dealer(session, dealer)
+    assert _FakeClient.requested == []
+    assert session.execute(select(ListingImage)).scalars().all().__len__() == 2

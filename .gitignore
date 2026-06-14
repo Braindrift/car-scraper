@@ -36,3 +36,7 @@ Thumbs.db
 
 # Alembic local artifacts
 alembic/versions/__pycache__/
+
+# Downloaded / seeded listing images (runtime artifacts, not source).
+# The bundled sample sources under services/demo_assets/ are kept.
+src/carscraper/web/static/images/
