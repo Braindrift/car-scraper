@@ -197,6 +197,53 @@ def test_listings_table_active_only(db_session: Session) -> None:
     assert "Volvo" not in response.text
 
 
+def test_dashboard_shows_active_status_column(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+
+    assert "Active" in client.get("/").text
+
+    listing.active = False
+    db_session.commit()
+    assert "Inactive" in client.get("/").text
+
+
+def test_dashboard_hides_discarded_listing(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+    listing.discarded = True
+    db_session.commit()
+
+    # Discarded rows drop off the main dashboard... (check the row's detail
+    # link, since "Volvo" also appears in the filter form's placeholder text).
+    row_link = f'href="/listings/{listing.id}"'
+    assert row_link not in client.get("/").text
+    # ...but show up on the Discarded page.
+    assert row_link in client.get("/discarded").text
+
+
+def test_discard_endpoint_marks_discarded_and_triggers_refresh(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+
+    response = client.post(f"/listings/{listing.id}/discard")
+
+    assert response.status_code == 204
+    assert response.headers.get("HX-Trigger") == "refreshListings"
+    db_session.refresh(listing)
+    assert listing.discarded is True
+
+
+def test_restore_endpoint_clears_discarded(db_session: Session) -> None:
+    listing = _seed_listing(db_session)
+    listing.discarded = True
+    db_session.commit()
+
+    response = client.post(f"/listings/{listing.id}/restore")
+
+    assert response.status_code == 204
+    assert response.headers.get("HX-Trigger") == "refreshListings"
+    db_session.refresh(listing)
+    assert listing.discarded is False
+
+
 def test_dashboard_dealer_dropdown_lists_dealers(db_session: Session) -> None:
     _seed_listing(db_session)
 

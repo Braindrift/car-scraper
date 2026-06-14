@@ -18,6 +18,7 @@ from carscraper.services.listings import (
     ListingFilters,
     list_car_listings,
     list_dealers_with_listings,
+    set_listing_discarded,
 )
 
 
@@ -144,6 +145,42 @@ def test_combined_filters_no_match(session: Session, seeded: dict[str, object]) 
     )
 
     assert results == []
+
+
+def test_discarded_filter_excludes_and_isolates(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    set_listing_discarded(session, seeded["kia"].id, discarded=True)
+
+    # discarded=False -> only the non-discarded rows (the main dashboard).
+    active_list = list_car_listings(session, ListingFilters(discarded=False))
+    assert {listing.id for listing in active_list} == {
+        seeded["volvo_active"].id,
+        seeded["volvo_inactive"].id,
+    }
+
+    # discarded=True -> only the discarded rows (the Discarded page).
+    discarded_list = list_car_listings(session, ListingFilters(discarded=True))
+    assert [listing.id for listing in discarded_list] == [seeded["kia"].id]
+
+    # No discarded filter still returns everything.
+    assert len(list_car_listings(session)) == 3
+
+
+def test_set_listing_discarded_toggles_and_persists(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    listing_id = seeded["volvo_active"].id
+
+    discarded = set_listing_discarded(session, listing_id, discarded=True)
+    assert discarded is not None and discarded.discarded is True
+
+    restored = set_listing_discarded(session, listing_id, discarded=False)
+    assert restored is not None and restored.discarded is False
+
+
+def test_set_listing_discarded_missing_returns_none(session: Session) -> None:
+    assert set_listing_discarded(session, 999, discarded=True) is None
 
 
 def test_list_dealers_with_listings(session: Session, seeded: dict[str, object]) -> None:

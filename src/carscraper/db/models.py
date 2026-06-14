@@ -92,6 +92,8 @@ class CarListing(Base):
         Index("ix_car_listings_make_model", "make", "model"),
         # Supports "currently active listings" queries.
         Index("ix_car_listings_active", "active"),
+        # Supports splitting the dashboard's main list from the discarded list.
+        Index("ix_car_listings_discarded", "discarded"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -121,6 +123,12 @@ class CarListing(Base):
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # False once a listing isn't seen in a scrape run (implies sold/removed).
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # True when the user has manually set the listing aside ("not interested"
+    # or de-cluttering inactive ones). Distinct from `active`: a discarded
+    # listing is still scraped/updated and still counts in stats — it's just
+    # hidden from the main dashboard list and shown on the Discarded page. The
+    # scrape upsert never writes this, so the flag survives re-scrapes.
+    discarded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     dealer: Mapped[Dealer] = relationship(back_populates="listings")
     price_snapshots: Mapped[list[PriceSnapshot]] = relationship(

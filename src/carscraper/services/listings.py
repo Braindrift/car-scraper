@@ -57,6 +57,10 @@ class ListingFilters:
     min_price: int | None = None
     max_price: int | None = None
     active_only: bool = False
+    # Tri-state discarded filter: `None` applies no filter, `False` returns
+    # only non-discarded listings (the main dashboard), `True` returns only
+    # discarded ones (the Discarded page).
+    discarded: bool | None = None
 
 
 def list_car_listings(session: Session, filters: ListingFilters | None = None) -> list[CarListing]:
@@ -86,6 +90,8 @@ def list_car_listings(session: Session, filters: ListingFilters | None = None) -
         stmt = stmt.where(CarListing.price <= filters.max_price)
     if filters.active_only:
         stmt = stmt.where(CarListing.active.is_(True))
+    if filters.discarded is not None:
+        stmt = stmt.where(CarListing.discarded.is_(filters.discarded))
 
     stmt = stmt.order_by(CarListing.last_seen.desc())
 
@@ -261,3 +267,19 @@ def mark_listing_viewed(session: Session, listing_id: int) -> None:
         return
     listing.last_viewed_at = _now()
     session.commit()
+
+
+def set_listing_discarded(session: Session, listing_id: int, discarded: bool) -> CarListing | None:
+    """Set `listing_id`'s `discarded` flag, returning the updated listing.
+
+    Discarding (`discarded=True`) hides a listing from the main dashboard but
+    keeps the row — it's still scraped/updated and still counts in stats — and
+    surfaces it on the Discarded page. Restoring (`discarded=False`) reverses
+    that. Returns `None` (no commit) if the listing doesn't exist.
+    """
+    listing = session.get(CarListing, listing_id)
+    if listing is None:
+        return None
+    listing.discarded = discarded
+    session.commit()
+    return listing

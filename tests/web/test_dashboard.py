@@ -7,11 +7,35 @@ Chart.js script tags.
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from collections.abc import Generator
 
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from carscraper.db.session import Base, SessionLocal, create_db_engine
 from carscraper.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def db_session(tmp_path, monkeypatch) -> Generator[Session, None, None]:
+    """Point the app at an empty temp DB so the empty-state assertions hold.
+
+    Without this the tests would query the developer's real `carscraper.db`,
+    whose contents (e.g. after `seed-demo-data`) would break the empty state.
+    """
+    db_path = tmp_path / "web_dashboard_test.db"
+    engine = create_db_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(engine)
+
+    monkeypatch.setattr(SessionLocal, "kw", {**SessionLocal.kw, "bind": engine})
+
+    with Session(engine) as session:
+        yield session
+
+    engine.dispose()
 
 
 def test_dashboard_returns_200_with_empty_state() -> None:

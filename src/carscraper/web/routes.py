@@ -7,7 +7,7 @@ logic live here (see CLAUDE.md's "Layer responsibilities").
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
 from carscraper.db.session import get_session
@@ -18,6 +18,7 @@ from carscraper.services.listings import (
     list_dealers_with_listings,
     listing_statuses,
     mark_listing_viewed,
+    set_listing_discarded,
 )
 from carscraper.services.scrape_status import (
     get_run_log_entries,
@@ -44,12 +45,16 @@ def _parse_filters(
     min_price: str | None,
     max_price: str | None,
     active_only: str | None,
+    discarded: bool | None = None,
 ) -> ListingFilters:
     """Build `ListingFilters` from raw (string) query params.
 
     Query params arrive as strings (or `None`/empty string when an HTML
     form field is left blank); this normalizes those into the typed values
     `ListingFilters` expects, treating blank strings as "not set".
+
+    `discarded` is not user-facing in the filter form — the route sets it to
+    `False` for the main dashboard and `True` for the Discarded page.
     """
     return ListingFilters(
         make=make or None,
@@ -58,6 +63,7 @@ def _parse_filters(
         min_price=int(min_price) if min_price else None,
         max_price=int(max_price) if max_price else None,
         active_only=bool(active_only),
+        discarded=discarded,
     )
 
 
@@ -79,7 +85,9 @@ def dashboard(
     reflected back into the form so the page can be linked/bookmarked with
     filters applied.
     """
-    filters = _parse_filters(make, model, dealer_id, min_price, max_price, active_only)
+    filters = _parse_filters(
+        make, model, dealer_id, min_price, max_price, active_only, discarded=False
+    )
 
     with get_session() as session:
         listings = list_car_listings(session, filters)
@@ -94,6 +102,8 @@ def dashboard(
             "dealers": dealers,
             "filters": filters,
             "statuses": statuses,
+            "view": "active",
+            "table_url": "/listings/table",
         },
     )
 
@@ -114,7 +124,9 @@ def listings_table(
     so the filter form can swap `#listings-table`'s contents without a full
     page reload.
     """
-    filters = _parse_filters(make, model, dealer_id, min_price, max_price, active_only)
+    filters = _parse_filters(
+        make, model, dealer_id, min_price, max_price, active_only, discarded=False
+    )
 
     with get_session() as session:
         listings = list_car_listings(session, filters)
@@ -123,8 +135,97 @@ def listings_table(
     return templates.TemplateResponse(
         request,
         "partials/listings_table.html",
-        {"listings": listings, "statuses": statuses},
+        {"listings": listings, "statuses": statuses, "view": "active"},
     )
+
+
+@router.get("/discarded", response_class=HTMLResponse)
+def discarded_page(
+    request: Request,
+    make: str | None = None,
+    model: str | None = None,
+    dealer_id: str | None = None,
+    min_price: str | None = None,
+    max_price: str | None = None,
+    active_only: str | None = None,
+) -> HTMLResponse:
+    """Render the Discarded page: listings the user has set aside.
+
+    Same filter form and table as the dashboard, but scoped to discarded
+    listings. Discarded entries are still scraped/updated and still count in
+    stats — this is just a place to review/restore them.
+    """
+    filters = _parse_filters(
+        make, model, dealer_id, min_price, max_price, active_only, discarded=True
+    )
+
+    with get_session() as session:
+        listings = list_car_listings(session, filters)
+        dealers = list_dealers_with_listings(session)
+        statuses = listing_statuses(session, listings)
+
+    return templates.TemplateResponse(
+        request,
+        "discarded.html",
+        {
+            "listings": listings,
+            "dealers": dealers,
+            "filters": filters,
+            "statuses": statuses,
+            "view": "discarded",
+            "table_url": "/discarded/table",
+        },
+    )
+
+
+@router.get("/discarded/table", response_class=HTMLResponse)
+def discarded_table(
+    request: Request,
+    make: str | None = None,
+    model: str | None = None,
+    dealer_id: str | None = None,
+    min_price: str | None = None,
+    max_price: str | None = None,
+    active_only: str | None = None,
+) -> HTMLResponse:
+    """Render just the discarded listings table partial, for the filter form."""
+    filters = _parse_filters(
+        make, model, dealer_id, min_price, max_price, active_only, discarded=True
+    )
+
+    with get_session() as session:
+        listings = list_car_listings(session, filters)
+        statuses = listing_statuses(session, listings)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/listings_table.html",
+        {"listings": listings, "statuses": statuses, "view": "discarded"},
+    )
+
+
+@router.post("/listings/{listing_id}/discard")
+def discard_listing(listing_id: int) -> Response:
+    """Mark a listing discarded; tell HTMX to refresh the listings table.
+
+    Returns 204 with an `HX-Trigger: refreshListings` header rather than
+    re-rendering the table itself — the filter form listens for that event and
+    re-fetches the table with the current filters applied, so the discarded row
+    drops out without losing the user's filters.
+    """
+    with get_session() as session:
+        set_listing_discarded(session, listing_id, discarded=True)
+
+    return Response(status_code=204, headers={"HX-Trigger": "refreshListings"})
+
+
+@router.post("/listings/{listing_id}/restore")
+def restore_listing(listing_id: int) -> Response:
+    """Restore a discarded listing; tell HTMX to refresh the listings table."""
+    with get_session() as session:
+        set_listing_discarded(session, listing_id, discarded=False)
+
+    return Response(status_code=204, headers={"HX-Trigger": "refreshListings"})
 
 
 @router.get("/listings/{listing_id}", response_class=HTMLResponse)
