@@ -60,3 +60,9 @@ async def run_scraper(slug: str) -> list[CarListingDTO]:
     scraper_cls = get_scraper_class(slug)
     scraper = scraper_cls()
     return await scraper.scrape()
+
+
+# Importing the dealers package triggers each dealer module's `@register`
+# decorator, populating `_REGISTRY`. Done at the bottom so `register` is
+# already defined when the dealer modules import it (avoids a circular import).
+from carscraper.scrapers import dealers as _dealers  # noqa: E402,F401

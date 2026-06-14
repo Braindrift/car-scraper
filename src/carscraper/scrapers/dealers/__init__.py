@@ -1,1 +1,11 @@
-"""One module (or sub-package) per dealer, each implementing `BaseScraper`."""
+"""One module (or sub-package) per dealer, each implementing `BaseScraper`.
+
+Importing a dealer module triggers its ``@register`` decorator, adding it to
+`scrapers.registry`. List those imports here so "what scrapers exist" stays
+greppable in one place (no filesystem scanning — see `registry.py`).
+"""
+
+from __future__ import annotations
+
+# Dev/demo-only simulated scrapers (registered under the `demo_*` slugs).
+from carscraper.scrapers.dealers import demo as _demo  # noqa: F401
