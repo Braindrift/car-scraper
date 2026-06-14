@@ -10,6 +10,7 @@
         <th class="py-2 pr-4">Mileage</th>
         <th class="py-2 pr-4">Price</th>
         <th class="py-2 pr-4">Status</th>
+        <th class="py-2 pr-4"></th>
       </tr>
     </thead>
     <tbody>
@@ -36,6 +37,9 @@
             {% else %}
               <span class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">Inactive</span>
             {% endif %}
+          </td>
+          <td class="py-2 pr-4">
+            <a href="/listings/{{ listing.id }}" class="text-blue-600 hover:underline">Details</a>
           </td>
         </tr>
       {% endfor %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Stats - CarScraper{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-bold mb-4">Stats</h1>
+
+  <h2 class="text-lg font-semibold mb-2">Average price per model</h2>
+
+  {% if model_stats %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-200 text-left text-gray-500">
+          <th class="py-2 pr-4">Make</th>
+          <th class="py-2 pr-4">Model</th>
+          <th class="py-2 pr-4">Variant</th>
+          <th class="py-2 pr-4">Avg. price</th>
+          <th class="py-2 pr-4">Active listings</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in model_stats %}
+          <tr class="border-b border-gray-100">
+            <td class="py-2 pr-4">{{ row.make }}</td>
+            <td class="py-2 pr-4">{{ row.model }}</td>
+            <td class="py-2 pr-4">{{ row.variant or "-" }}</td>
+            <td class="py-2 pr-4">{{ "{:,.0f}".format(row.avg_price).replace(",", " ") }} kr</td>
+            <td class="py-2 pr-4">{{ row.listing_count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+      No active listings with a price yet — run a scrape to get started.
+    </div>
+  {% endif %}
+{% endblock %}

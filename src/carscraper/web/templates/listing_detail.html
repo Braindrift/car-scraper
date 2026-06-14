@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ listing.make }} {{ listing.model }} - CarScraper{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-bold mb-1">
+    {{ listing.make }} {{ listing.model }}{% if listing.variant %} {{ listing.variant }}{% endif %}
+  </h1>
+  <p class="mb-4 text-sm text-gray-500">
+    {{ listing.dealer.name }} &middot;
+    <a href="{{ listing.url }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">
+      View listing
+    </a>
+  </p>
+
+  <table class="mb-6 w-full max-w-md text-sm">
+    <tbody>
+      <tr class="border-b border-gray-100">
+        <td class="py-2 pr-4 text-gray-500">Year</td>
+        <td class="py-2 pr-4">{{ listing.year or "-" }}</td>
+      </tr>
+      <tr class="border-b border-gray-100">
+        <td class="py-2 pr-4 text-gray-500">Mileage</td>
+        <td class="py-2 pr-4">
+          {{ "{:,}".format(listing.mileage).replace(",", " ") if listing.mileage is not none else "-" }}
+        </td>
+      </tr>
+      <tr class="border-b border-gray-100">
+        <td class="py-2 pr-4 text-gray-500">Current price</td>
+        <td class="py-2 pr-4">
+          {{ "{:,}".format(listing.price).replace(",", " ") + " kr" if listing.price is not none else "-" }}
+        </td>
+      </tr>
+      <tr class="border-b border-gray-100">
+        <td class="py-2 pr-4 text-gray-500">Fuel type</td>
+        <td class="py-2 pr-4">{{ listing.fuel_type or "-" }}</td>
+      </tr>
+      <tr class="border-b border-gray-100">
+        <td class="py-2 pr-4 text-gray-500">Transmission</td>
+        <td class="py-2 pr-4">{{ listing.transmission or "-" }}</td>
+      </tr>
+      <tr class="border-b border-gray-100">
+        <td class="py-2 pr-4 text-gray-500">Status</td>
+        <td class="py-2 pr-4">
+          {% if listing.active %}
+            <span class="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">Active</span>
+          {% else %}
+            <span class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">Inactive</span>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="text-lg font-semibold mb-2">Price history</h2>
+
+  {% if history %}
+    <div class="max-w-2xl rounded border border-gray-200 bg-white p-4">
+      <canvas id="price-history-chart"></canvas>
+    </div>
+    <script>
+      const priceHistoryChart = new Chart(
+        document.getElementById("price-history-chart"),
+        {
+          type: "line",
+          data: {
+            labels: {{ chart_labels | tojson }},
+            datasets: [{
+              label: "Price (kr)",
+              data: {{ chart_prices | tojson }},
+              borderColor: "#1f2937",
+              backgroundColor: "rgba(31, 41, 55, 0.1)",
+              tension: 0.1,
+            }],
+          },
+          options: {
+            scales: {
+              y: { beginAtZero: false },
+            },
+          },
+        }
+      );
+    </script>
+  {% else %}
+    <div class="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+      No price history yet — this listing hasn't been re-scraped since it was first seen.
+    </div>
+  {% endif %}
+{% endblock %}

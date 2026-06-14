@@ -66,6 +66,20 @@ def list_car_listings(session: Session, filters: ListingFilters | None = None) -
     return list(session.execute(stmt).scalars().all())
 
 
+def get_listing(session: Session, listing_id: int) -> CarListing | None:
+    """Return a single `CarListing` by id, with its `dealer` eagerly loaded.
+
+    Returns `None` if no listing with `listing_id` exists. Used by the
+    listing detail view (CAR-8).
+    """
+    stmt = (
+        select(CarListing)
+        .options(selectinload(CarListing.dealer))
+        .where(CarListing.id == listing_id)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
 def list_dealers_with_listings(session: Session) -> list[Dealer]:
     """Return `Dealer` rows that have at least one `CarListing`, by name.
 

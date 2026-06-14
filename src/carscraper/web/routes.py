@@ -7,15 +7,17 @@ logic live here (see CLAUDE.md's "Layer responsibilities").
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from carscraper.db.session import get_session
 from carscraper.services.listings import (
     ListingFilters,
+    get_listing,
     list_car_listings,
     list_dealers_with_listings,
 )
+from carscraper.services.stats import avg_price_per_model, price_history
 from carscraper.services.tracked_models import (
     create_tracked_model,
     delete_tracked_model,
@@ -106,6 +108,56 @@ def listings_table(
         request,
         "partials/listings_table.html",
         {"listings": listings},
+    )
+
+
+@router.get("/listings/{listing_id}", response_class=HTMLResponse)
+def listing_detail(request: Request, listing_id: int) -> HTMLResponse:
+    """Render the detail page for a single `CarListing`.
+
+    Shows the listing's details plus a Chart.js line chart of its price
+    history (`services.stats.price_history`). If the listing has no
+    `PriceSnapshot` rows yet, the chart renders with an empty series and a
+    "no price history yet" message instead of erroring.
+
+    Returns a 404 if no listing with `listing_id` exists.
+    """
+    with get_session() as session:
+        listing = get_listing(session, listing_id)
+        if listing is None:
+            raise HTTPException(status_code=404, detail="Listing not found")
+
+        history = price_history(session, listing_id)
+
+    chart_labels = [point.scraped_at.isoformat() for point in history]
+    chart_prices = [point.price for point in history]
+
+    return templates.TemplateResponse(
+        request,
+        "listing_detail.html",
+        {
+            "listing": listing,
+            "history": history,
+            "chart_labels": chart_labels,
+            "chart_prices": chart_prices,
+        },
+    )
+
+
+@router.get("/stats", response_class=HTMLResponse)
+def stats_page(request: Request) -> HTMLResponse:
+    """Render the stats summary page: average price per tracked model.
+
+    With no active listings (or none with a price), renders an empty-state
+    message instead of an empty table.
+    """
+    with get_session() as session:
+        model_stats = avg_price_per_model(session)
+
+    return templates.TemplateResponse(
+        request,
+        "stats.html",
+        {"model_stats": model_stats},
     )
 
 
