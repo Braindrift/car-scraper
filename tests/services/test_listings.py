@@ -2,7 +2,7 @@
 
 `list_car_listings` is exercised against a seeded temporary SQLite database
 covering each supported filter (make, model, dealer, price range,
-active-only) individually and in combination.
+active-only, year, mileage range) individually and in combination.
 """
 
 from __future__ import annotations
@@ -49,6 +49,8 @@ def seeded(session: Session) -> dict[str, object]:
         make="Volvo",
         model="V70",
         price=150_000,
+        year=2015,
+        mileage=5_000,
         active=True,
     )
     volvo_inactive = CarListing(
@@ -58,6 +60,8 @@ def seeded(session: Session) -> dict[str, object]:
         make="Volvo",
         model="XC60",
         price=300_000,
+        year=2018,
+        mileage=10_000,
         active=False,
     )
     kia = CarListing(
@@ -67,6 +71,8 @@ def seeded(session: Session) -> dict[str, object]:
         make="Kia",
         model="Sportage",
         price=220_000,
+        year=None,
+        mileage=None,
         active=True,
     )
     session.add_all([volvo_active, volvo_inactive, kia])
@@ -118,6 +124,40 @@ def test_filter_by_price_range(session: Session, seeded: dict[str, object]) -> N
     results = list_car_listings(session, ListingFilters(min_price=160_000, max_price=250_000))
 
     assert [listing.id for listing in results] == [seeded["kia"].id]
+
+
+def test_filter_by_year(session: Session, seeded: dict[str, object]) -> None:
+    results = list_car_listings(session, ListingFilters(year=2015))
+
+    assert [listing.id for listing in results] == [seeded["volvo_active"].id]
+
+
+def test_filter_by_year_excludes_null_year(session: Session, seeded: dict[str, object]) -> None:
+    results = list_car_listings(session, ListingFilters(year=2020))
+
+    assert results == []
+
+
+def test_filter_by_mileage_range(session: Session, seeded: dict[str, object]) -> None:
+    results = list_car_listings(session, ListingFilters(min_mileage=6_000, max_mileage=15_000))
+
+    assert [listing.id for listing in results] == [seeded["volvo_inactive"].id]
+
+
+def test_filter_by_min_mileage_excludes_null_mileage(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    results = list_car_listings(session, ListingFilters(min_mileage=0))
+
+    assert seeded["kia"].id not in {listing.id for listing in results}
+
+
+def test_filter_by_mileage_range_inclusive_boundaries(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    results = list_car_listings(session, ListingFilters(min_mileage=5_000, max_mileage=5_000))
+
+    assert [listing.id for listing in results] == [seeded["volvo_active"].id]
 
 
 def test_filter_active_only(session: Session, seeded: dict[str, object]) -> None:

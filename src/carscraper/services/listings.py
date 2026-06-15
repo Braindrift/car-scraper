@@ -61,6 +61,12 @@ class ListingFilters:
     # only non-discarded listings (the main dashboard), `True` returns only
     # discarded ones (the Discarded page).
     discarded: bool | None = None
+    # Exact construction-year match, for drilling down from a year bucket
+    # (CAR-22).
+    year: int | None = None
+    # Mileage range bounds, for drilling down from a mileage bucket (CAR-22).
+    min_mileage: int | None = None
+    max_mileage: int | None = None
 
 
 def list_car_listings(session: Session, filters: ListingFilters | None = None) -> list[CarListing]:
@@ -88,6 +94,12 @@ def list_car_listings(session: Session, filters: ListingFilters | None = None) -
         stmt = stmt.where(CarListing.price >= filters.min_price)
     if filters.max_price is not None:
         stmt = stmt.where(CarListing.price <= filters.max_price)
+    if filters.year is not None:
+        stmt = stmt.where(CarListing.year == filters.year)
+    if filters.min_mileage is not None:
+        stmt = stmt.where(CarListing.mileage >= filters.min_mileage)
+    if filters.max_mileage is not None:
+        stmt = stmt.where(CarListing.mileage <= filters.max_mileage)
     if filters.active_only:
         stmt = stmt.where(CarListing.active.is_(True))
     if filters.discarded is not None:
