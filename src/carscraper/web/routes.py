@@ -48,11 +48,13 @@ router = APIRouter(tags=["web"])
 def _count_label(listing_count: int, excluded_count: int) -> str:
     """Format a distribution-chart bar's in-bar count label.
 
-    `"N"` normally, or `"N (M excluded)"` when `excluded_count` listings in
-    the bucket had no usable price (CAR-24's "low bid" exclusion).
+    `"N"` normally, or `"N(M)"` when `excluded_count` listings in the bucket
+    had no usable price (CAR-24's "low bid" exclusion) — the parenthesized
+    number is understood to be the excluded count, so it isn't spelled out
+    (keeps the label short enough to fit in the bar).
     """
     if excluded_count:
-        return f"{listing_count} ({excluded_count} excluded)"
+        return f"{listing_count}({excluded_count})"
     return str(listing_count)
 
 

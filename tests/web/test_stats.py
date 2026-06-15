@@ -236,9 +236,9 @@ def test_stats_page_year_bucket_chart_data_with_excluded_and_unpriced(
     assert response.status_code == 200
     assert '"2018", "2021"' in response.text
     # 2018 bucket: 3 listings, 1 excluded as "low bid".
-    assert '"3 (1 excluded)"' in response.text
+    assert '"3(1)"' in response.text
     # 2021 bucket: 1 listing, fully excluded (no usable price at all).
-    assert '"1 (1 excluded)"' in response.text
+    assert '"1(1)"' in response.text
     # 2018's usable prices are [150000, 200000] -> min/max range and median 175000.
     assert "[150000, 200000]" in response.text
     assert "175000.0" in response.text
