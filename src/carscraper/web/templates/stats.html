@@ -78,4 +78,136 @@
       {% endif %}
     </div>
   {% endif %}
+
+  <h2 class="text-lg font-semibold mb-2 mt-8">Distribution</h2>
+
+  <div class="rounded border border-gray-200 bg-white p-4">
+    <div class="mb-3 flex gap-2 border-b border-gray-200">
+      <button
+        type="button"
+        id="tab-by-year"
+        class="distribution-tab border-b-2 border-blue-600 px-3 py-2 text-sm font-medium text-blue-600"
+        data-target="chart-by-year"
+      >By year</button>
+      <button
+        type="button"
+        id="tab-by-mileage"
+        class="distribution-tab border-b-2 border-transparent px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700"
+        data-target="chart-by-mileage"
+      >By mileage</button>
+    </div>
+
+    {% if year_labels %}
+      <div id="chart-by-year" class="distribution-chart">
+        <canvas id="year-chart"></canvas>
+      </div>
+    {% else %}
+      <div id="chart-by-year" class="distribution-chart rounded border border-dashed border-gray-300 p-8 text-center text-gray-500">
+        No data to chart yet.
+      </div>
+    {% endif %}
+
+    {% if mileage_labels %}
+      <div id="chart-by-mileage" class="distribution-chart hidden">
+        <canvas id="mileage-chart"></canvas>
+      </div>
+    {% else %}
+      <div id="chart-by-mileage" class="distribution-chart hidden rounded border border-dashed border-gray-300 p-8 text-center text-gray-500">
+        No data to chart yet.
+      </div>
+    {% endif %}
+  </div>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll(".distribution-tab");
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach((other) => {
+            other.classList.remove("border-blue-600", "text-blue-600");
+            other.classList.add("border-transparent", "text-gray-500");
+          });
+          tab.classList.remove("border-transparent", "text-gray-500");
+          tab.classList.add("border-blue-600", "text-blue-600");
+
+          document.querySelectorAll(".distribution-chart").forEach((panel) => {
+            panel.classList.toggle("hidden", panel.id !== tab.dataset.target);
+          });
+        });
+      });
+
+      const countAxis = {
+        type: "linear",
+        position: "left",
+        beginAtZero: true,
+        title: { display: true, text: "Listings" },
+        ticks: { precision: 0 },
+      };
+      const priceAxis = {
+        type: "linear",
+        position: "right",
+        beginAtZero: true,
+        title: { display: true, text: "Price (kr)" },
+        grid: { drawOnChartArea: false },
+      };
+
+      {% if year_labels %}
+        new Chart(document.getElementById("year-chart"), {
+          type: "bar",
+          data: {
+            labels: {{ year_labels | tojson }},
+            datasets: [
+              {
+                label: "Listings",
+                data: {{ year_counts | tojson }},
+                backgroundColor: "rgba(37, 99, 235, 0.5)",
+                yAxisID: "y",
+              },
+              {
+                label: "Price range",
+                data: {{ year_price_ranges | tojson }},
+                backgroundColor: "rgba(16, 185, 129, 0.4)",
+                yAxisID: "y1",
+              },
+            ],
+          },
+          options: {
+            scales: {
+              y: countAxis,
+              y1: priceAxis,
+            },
+          },
+        });
+      {% endif %}
+
+      {% if mileage_labels %}
+        new Chart(document.getElementById("mileage-chart"), {
+          type: "bar",
+          data: {
+            labels: {{ mileage_labels | tojson }},
+            datasets: [
+              {
+                label: "Listings",
+                data: {{ mileage_counts | tojson }},
+                backgroundColor: "rgba(37, 99, 235, 0.5)",
+                yAxisID: "y",
+              },
+              {
+                label: "Price range",
+                data: {{ mileage_price_ranges | tojson }},
+                backgroundColor: "rgba(16, 185, 129, 0.4)",
+                yAxisID: "y1",
+              },
+            ],
+          },
+          options: {
+            scales: {
+              y: countAxis,
+              y1: priceAxis,
+            },
+          },
+        });
+      {% endif %}
+    })();
+  </script>
 {% endblock %}

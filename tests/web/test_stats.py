@@ -53,6 +53,8 @@ def _seed_listing(
     make: str = "Volvo",
     model: str = "V70",
     variant: str | None = "T5",
+    year: int | None = 2018,
+    mileage: int | None = 85_000,
     price: int | None = 189_000,
     active: bool = True,
 ) -> CarListing:
@@ -71,8 +73,8 @@ def _seed_listing(
         make=make,
         model=model,
         variant=variant,
-        year=2018,
-        mileage=85_000,
+        year=year,
+        mileage=mileage,
         price=price,
         active=active,
     )
@@ -159,6 +161,71 @@ def test_stats_page_include_inactive_toggles_counts(db_session: Session) -> None
     with_inactive = client.get("/stats", params={"include_inactive": "true"})
     assert with_inactive.status_code == 200
     assert "999 000" in with_inactive.text
+
+
+def test_stats_page_distribution_charts_render(db_session: Session) -> None:
+    _seed_listing(db_session, year=2018, mileage=5_000, price=150_000)
+
+    response = client.get("/stats")
+
+    assert response.status_code == 200
+    # Tabbed "By year" / "By mileage" section with both chart canvases.
+    assert ">By year<" in response.text
+    assert ">By mileage<" in response.text
+    assert 'id="year-chart"' in response.text
+    assert 'id="mileage-chart"' in response.text
+
+
+def test_stats_page_year_bucket_chart_data(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", year=2018, mileage=5_000, price=150_000)
+    _seed_listing(db_session, external_id="2", year=2020, mileage=5_000, price=200_000)
+    _seed_listing(db_session, external_id="3", year=None, mileage=5_000, price=50_000)
+
+    response = client.get("/stats")
+
+    assert response.status_code == 200
+    # Years ascending, "Unknown" bucket last; one entry per bucket.
+    assert '"2018", "2020", "Unknown"' in response.text
+    # Counts: one listing per bucket.
+    assert "[1, 1, 1]" in response.text
+    # Price ranges: each bucket has a single listing, so min == max.
+    assert "[[150000, 150000], [200000, 200000], [50000, 50000]]" in response.text
+
+
+def test_stats_page_mileage_bucket_chart_data(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", year=2018, mileage=1_000, price=150_000)
+    _seed_listing(db_session, external_id="2", year=2018, mileage=35_000, price=50_000)
+    _seed_listing(db_session, external_id="3", year=2018, mileage=None, price=80_000)
+
+    response = client.get("/stats")
+
+    assert response.status_code == 200
+    # Fixed bucket order: only buckets with data are returned, "30000+" before "Unknown".
+    assert '"0-2000", "30000+", "Unknown"' in response.text
+    assert "[[150000, 150000], [50000, 50000], [80000, 80000]]" in response.text
+
+
+def test_stats_page_distribution_charts_scoped_by_make_and_model(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", make="Volvo", model="V70", year=2018, price=150_000)
+    _seed_listing(
+        db_session, external_id="2", make="Kia", model="Sportage", year=2020, price=220_000
+    )
+
+    response = client.get("/stats", params={"make": "Volvo", "model": "V70"})
+
+    assert response.status_code == 200
+    # Only the Volvo V70's year (2018) appears in the chart data.
+    assert '"2018"' in response.text
+    assert '"2020"' not in response.text
+
+
+def test_stats_page_distribution_charts_empty_state(db_session: Session) -> None:
+    response = client.get("/stats")
+
+    assert response.status_code == 200
+    assert ">By year<" in response.text
+    assert ">By mileage<" in response.text
+    assert response.text.count("No data to chart yet.") == 2
 
 
 def test_listing_detail_not_found(db_session: Session) -> None:

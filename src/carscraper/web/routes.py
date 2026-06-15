@@ -27,7 +27,12 @@ from carscraper.services.scrape_status import (
     launch_dealer_scrape,
     list_dealer_scrape_status,
 )
-from carscraper.services.stats import model_overview_stats, price_history
+from carscraper.services.stats import (
+    mileage_bucket_stats,
+    model_overview_stats,
+    price_history,
+    year_bucket_stats,
+)
 from carscraper.services.tracked_models import (
     create_tracked_model,
     delete_tracked_model,
@@ -291,6 +296,20 @@ def stats_page(
         model_stats = model_overview_stats(
             session, make=make, model=model, include_inactive=show_inactive
         )
+        year_stats = year_bucket_stats(
+            session, make=make, model=model, include_inactive=show_inactive
+        )
+        mileage_stats = mileage_bucket_stats(
+            session, make=make, model=model, include_inactive=show_inactive
+        )
+
+    year_labels = [str(row.year) if row.year is not None else "Unknown" for row in year_stats]
+    year_counts = [row.listing_count for row in year_stats]
+    year_price_ranges = [[row.min_price, row.max_price] for row in year_stats]
+
+    mileage_labels = [row.bucket for row in mileage_stats]
+    mileage_counts = [row.listing_count for row in mileage_stats]
+    mileage_price_ranges = [[row.min_price, row.max_price] for row in mileage_stats]
 
     return templates.TemplateResponse(
         request,
@@ -300,6 +319,12 @@ def stats_page(
             "make": make,
             "model": model,
             "include_inactive": show_inactive,
+            "year_labels": year_labels,
+            "year_counts": year_counts,
+            "year_price_ranges": year_price_ranges,
+            "mileage_labels": mileage_labels,
+            "mileage_counts": mileage_counts,
+            "mileage_price_ranges": mileage_price_ranges,
         },
     )
 
