@@ -40,11 +40,11 @@ from carscraper.db.models import CarListing, PriceSnapshot
 # current/leading bid) rather than real asking prices.
 LOW_BID_THRESHOLD = 0.66
 
-# Fixed mileage buckets (CAR-19), in display order. Each tuple is
-# `(label, lower_bound_inclusive, upper_bound_inclusive)`; `upper_bound`
-# is `None` for the open-ended "30000+" bucket. Listings with a null
-# `mileage` fall into the separate "Unknown" bucket, handled outside this
-# table.
+# Fixed mileage buckets (CAR-19), in display order, in Swedish mil (1 mil =
+# 10 km) - `CarListing.mileage`'s unit. Each tuple is `(label,
+# lower_bound_inclusive, upper_bound_inclusive)`; `upper_bound` is `None` for
+# the open-ended "30000+" bucket. Listings with a null `mileage` fall into the
+# separate "Unknown" bucket, handled outside this table.
 MILEAGE_BUCKETS: tuple[tuple[str, int, int | None], ...] = (
     ("0-2000", 0, 2000),
     ("2001-5000", 2001, 5000),

@@ -424,9 +424,9 @@ def stats_listings(
         category_label = "Mileage: Unknown"
     elif min_mileage or max_mileage:
         if max_mileage is None:
-            category_label = f"Mileage: {min_mileage}+ km"
+            category_label = f"Mileage: {min_mileage}+ mil"
         else:
-            category_label = f"Mileage: {min_mileage}-{max_mileage} km"
+            category_label = f"Mileage: {min_mileage}-{max_mileage} mil"
     else:
         category_label = ""
 

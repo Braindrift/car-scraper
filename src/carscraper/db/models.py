@@ -109,6 +109,8 @@ class CarListing(Base):
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     variant: Mapped[str | None] = mapped_column(String(100), nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Odometer reading in Swedish mil (1 mil = 10 km), matching
+    # `CarListingDTO.mileage`.
     mileage: Mapped[int | None] = mapped_column(Integer, nullable=True)
     price: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fuel_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

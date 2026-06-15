@@ -49,6 +49,8 @@ class CarListingDTO(BaseModel):
     model: str = Field(min_length=1)
     variant: str | None = None
     year: int | None = None
+    # Odometer reading in Swedish mil (1 mil = 10 km) - the unit Swedish
+    # dealer sites natively report mileage in.
     mileage: int | None = None
     price: int | None = None
     fuel_type: str | None = None

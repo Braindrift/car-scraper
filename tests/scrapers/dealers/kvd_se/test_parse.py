@@ -41,7 +41,7 @@ def test_parse_auction_normal_entry_with_buy_now() -> None:
         model="Niro",
         variant="Plug-in Hybrid 1.6 (141hk)",
         year=2021,
-        mileage=65000,
+        mileage=6500,
         price=223800,
         fuel_type="Petrol",
         transmission="Automatic",

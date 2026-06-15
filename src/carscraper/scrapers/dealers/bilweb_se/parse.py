@@ -48,9 +48,6 @@ _NON_DIGITS_RE = re.compile(r"\D+")
 # "2023-11" or "11/2023" -> "2023". Matches the year wherever it falls.
 _YEAR_IN_TEXT_RE = re.compile(r"\b(\d{4})\b")
 
-# 1 "mil" (Swedish mile, used for odometer readings) = 10 km.
-_MIL_TO_KM = 10
-
 
 def _text_after_dt(card_data: Tag, label: str) -> str | None:
     """Text of the `<dd>` immediately following the `<dt>` with text `label`.
@@ -106,12 +103,14 @@ def _derive_price(card: Tag) -> int | None:
 
 
 def _derive_mileage(card_data: Tag) -> int | None:
-    """`Mil:` row's `<dd>`, converted from "mil" to km (x10)."""
+    """`Mil:` row's `<dd>`, in Swedish mil (`CarListingDTO.mileage`'s unit;
+    1 mil = 10 km) - bilweb.se already reports mileage in mil, so no
+    conversion is needed."""
     text = _text_after_dt(card_data, "Mil:")
     if text is None:
         return None
     digits = _NON_DIGITS_RE.sub("", text)
-    return int(digits) * _MIL_TO_KM if digits else None
+    return int(digits) if digits else None
 
 
 def _derive_year(card_data: Tag) -> int | None:

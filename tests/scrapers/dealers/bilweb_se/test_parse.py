@@ -32,7 +32,7 @@ def _by_id(dtos: list[CarListingDTO]) -> dict[str, CarListingDTO]:
 
 
 def test_diesel_card_field_mapping() -> None:
-    """Card 12744081: diesel, full (non-truncated) heading, mileage mil->km."""
+    """Card 12744081: diesel, full (non-truncated) heading, mileage in mil."""
     dtos = _by_id(parse_listing_cards(_load("peugeot_5008.html")))
     dto = dtos["12744081"]
 
@@ -44,7 +44,7 @@ def test_diesel_card_field_mapping() -> None:
     assert dto.model == "5008"
     assert dto.variant == "1.6 BlueHDi 120 Euro 6 7-sits Aut"
     assert dto.year == 2016
-    assert dto.mileage == 142950  # 14 295 mil * 10
+    assert dto.mileage == 14295  # 14 295 mil
     assert dto.price == 89900
     assert dto.fuel_type == "Diesel"
     assert dto.transmission is None
@@ -60,7 +60,7 @@ def test_gasoline_card_field_mapping() -> None:
     assert dto.model == "5008"
     assert dto.variant == "GT PureTech 130 AUT"
     assert dto.year == 2023
-    assert dto.mileage == 30870  # 3 087 mil * 10
+    assert dto.mileage == 3087  # 3 087 mil
     assert dto.price == 279800
     assert dto.fuel_type == "Petrol"
 
@@ -74,7 +74,7 @@ def test_electric_gasoline_combo_maps_to_hybrid() -> None:
     assert dto.model == "5008"
     assert dto.fuel_type == "Hybrid"
     assert dto.price == 3599
-    assert dto.mileage == 10  # 1 mil * 10
+    assert dto.mileage == 1  # 1 mil
     assert dto.year == 2026
 
 
@@ -101,11 +101,11 @@ def test_variant_derived_from_truncated_heading_via_alt_text() -> None:
     assert dto.variant == "Recharge T6 AWD Geartronic Core Edition Drag El Stol H"
     assert dto.year == 2023
     assert dto.price == 439700
-    assert dto.mileage == 56410  # 5 641 mil * 10
+    assert dto.mileage == 5641  # 5 641 mil
 
 
 def test_diesel_card_with_truncated_heading_mileage_conversion() -> None:
-    """Card 12744358: diesel, truncated heading, mileage 20 600 mil -> 206 000 km."""
+    """Card 12744358: diesel, truncated heading, mileage 20 600 mil."""
     dtos = _by_id(parse_listing_cards(_load("volvo_xc60.html")))
     dto = dtos["12744358"]
 
@@ -113,7 +113,7 @@ def test_diesel_card_with_truncated_heading_mileage_conversion() -> None:
     assert dto.model == "XC60"
     assert dto.variant == "D4 AWD Summum VOC Varmare Dragkrok Skinn"
     assert dto.year == 2016
-    assert dto.mileage == 206000  # 20 600 mil * 10
+    assert dto.mileage == 20600  # 20 600 mil
     assert dto.fuel_type == "Diesel"
 
 
@@ -130,23 +130,23 @@ def test_row_card_duplicates_do_not_produce_extra_or_blank_listings() -> None:
 
 
 def test_row_card_duplicate_does_not_null_out_grid_fields() -> None:
-    """Card 12745960: hybrid, mileage 10 991 mil -> 109 910 km, year 2024 -
-    the grid card's data, not the row card's `None`s."""
+    """Card 12745960: hybrid, mileage 10 991 mil, year 2024 - the grid card's
+    data, not the row card's `None`s."""
     dtos = _by_id(parse_listing_cards(_load("volvo_xc60_rows.html")))
     dto = dtos["12745960"]
 
     assert dto.year == 2024
-    assert dto.mileage == 109910  # 10 991 mil * 10
+    assert dto.mileage == 10991  # 10 991 mil
     assert dto.fuel_type == "Hybrid"
 
 
 def test_row_card_diesel_listing_keeps_grid_fields() -> None:
-    """Card 12745948: diesel, mileage 15 490 mil -> 154 900 km, year 2015."""
+    """Card 12745948: diesel, mileage 15 490 mil, year 2015."""
     dtos = _by_id(parse_listing_cards(_load("volvo_xc60_rows.html")))
     dto = dtos["12745948"]
 
     assert dto.year == 2015
-    assert dto.mileage == 154900  # 15 490 mil * 10
+    assert dto.mileage == 15490  # 15 490 mil
     assert dto.fuel_type == "Diesel"
 
 
@@ -157,7 +157,7 @@ def test_row_card_listing_without_drivmedel_row_yields_none_fuel_type() -> None:
     dto = dtos["12745866"]
 
     assert dto.year == 2025
-    assert dto.mileage == 56250  # 5 625 mil * 10
+    assert dto.mileage == 5625  # 5 625 mil
     assert dto.fuel_type is None
 
 
@@ -184,7 +184,7 @@ def test_year_falls_back_to_tillv_man_when_ar_row_is_missing() -> None:
 
     assert len(dtos) == 1
     assert dtos[0].year == 2023
-    assert dtos[0].mileage == 10000  # 1 000 mil * 10
+    assert dtos[0].mileage == 1000  # 1 000 mil
 
 
 def test_year_falls_back_to_tillv_man_with_month_slash_year_format() -> None:

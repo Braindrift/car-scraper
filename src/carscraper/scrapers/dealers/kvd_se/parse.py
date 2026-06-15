@@ -21,6 +21,18 @@ from carscraper.scrapers.base import CarListingDTO
 
 logger = logging.getLogger(__name__)
 
+# kvd.se's API reports `odometerReading` in km; `CarListingDTO.mileage` is in
+# Swedish mil (1 mil = 10 km), matching bilweb.se's native unit.
+_KM_PER_MIL = 10
+
+
+def _derive_mileage(properties: dict) -> int | None:
+    """`odometerReading` (km) converted to mil (1 mil = 10 km)."""
+    odometer = properties.get("odometerReading")
+    if odometer is None:
+        return None
+    return round(odometer / _KM_PER_MIL)
+
 
 def _properties(raw: dict) -> dict:
     """`processObject.properties`, or `{}` if either level is missing/null."""
@@ -141,7 +153,7 @@ def parse_auction(raw: dict) -> CarListingDTO | None:
         model=model,
         variant=_derive_variant(properties, model),
         year=properties.get("modelYear"),
-        mileage=properties.get("odometerReading"),
+        mileage=_derive_mileage(properties),
         price=_derive_price(raw),
         fuel_type=_derive_fuel_type(properties),
         transmission=properties.get("gearbox"),

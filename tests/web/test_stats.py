@@ -303,7 +303,7 @@ def test_stats_listings_filters_by_mileage_range(db_session: Session) -> None:
     assert response.status_code == 200
     assert "151 000 kr" in response.text
     assert "52 000 kr" not in response.text
-    assert "Mileage: 0-2000 km" in response.text
+    assert "Mileage: 0-2000 mil" in response.text
 
 
 def test_stats_listings_filters_by_mileage_open_ended_bucket(db_session: Session) -> None:
@@ -315,7 +315,7 @@ def test_stats_listings_filters_by_mileage_open_ended_bucket(db_session: Session
     assert response.status_code == 200
     assert "52 000 kr" in response.text
     assert "151 000 kr" not in response.text
-    assert "Mileage: 30001+ km" in response.text
+    assert "Mileage: 30001+ mil" in response.text
 
 
 def test_stats_listings_filters_by_mileage_unknown(db_session: Session) -> None:
