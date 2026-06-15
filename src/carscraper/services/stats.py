@@ -3,8 +3,6 @@
 Per CLAUDE.md, routers/web never construct SQL/ORM queries directly — they
 call into this module. This module provides:
 
-- `avg_price_per_model`: average price per `(make, model, variant)` across
-  *active* listings, for the stats summary view.
 - `price_history`: the `(scraped_at, price)` series for a single
   `CarListing`'s `PriceSnapshot` rows, in chronological order, for the
   per-listing price-history chart.
@@ -43,17 +41,6 @@ MILEAGE_BUCKETS: tuple[tuple[str, int, int | None], ...] = (
     ("30000+", 30001, None),
 )
 MILEAGE_BUCKET_UNKNOWN = "Unknown"
-
-
-@dataclass(frozen=True)
-class ModelPriceStats:
-    """Average price for a `(make, model, variant)` group across active listings."""
-
-    make: str
-    model: str
-    variant: str | None
-    avg_price: float
-    listing_count: int
 
 
 @dataclass(frozen=True)
@@ -103,40 +90,6 @@ class MileageBucketStats:
     max_price: int
 
 
-def avg_price_per_model(session: Session) -> list[ModelPriceStats]:
-    """Return average price per `(make, model, variant)` across active listings.
-
-    Only `CarListing` rows with `active=True` and a non-null `price` are
-    considered. Rows are ordered by `make`, then `model`, then `variant`
-    (nulls first) for stable, predictable display order. Returns an empty
-    list if there are no active listings with a price.
-    """
-    stmt = (
-        select(
-            CarListing.make,
-            CarListing.model,
-            CarListing.variant,
-            func.avg(CarListing.price).label("avg_price"),
-            func.count(CarListing.id).label("listing_count"),
-        )
-        .where(CarListing.active.is_(True))
-        .where(CarListing.price.is_not(None))
-        .group_by(CarListing.make, CarListing.model, CarListing.variant)
-        .order_by(CarListing.make, CarListing.model, CarListing.variant)
-    )
-
-    return [
-        ModelPriceStats(
-            make=row.make,
-            model=row.model,
-            variant=row.variant,
-            avg_price=float(row.avg_price),
-            listing_count=row.listing_count,
-        )
-        for row in session.execute(stmt)
-    ]
-
-
 def price_history(session: Session, listing_id: int) -> list[PricePoint]:
     """Return the `(scraped_at, price)` series for `listing_id`, oldest-first.
 
@@ -161,15 +114,19 @@ def _apply_active_filter(stmt, include_inactive: bool):  # type: ignore[no-untyp
 
 
 def model_overview_stats(
-    session: Session, include_inactive: bool = False
+    session: Session,
+    make: str | None = None,
+    model: str | None = None,
+    include_inactive: bool = False,
 ) -> list[ModelOverviewStats]:
     """Return per-`(make, model)` price stats with variants rolled up.
 
-    Only listings with a non-null `price` are considered. By default
-    (`include_inactive=False`) only `active=True` listings are included;
-    `include_inactive=True` includes all listings regardless of `active`.
-    Rows are ordered by `make`, then `model`. Returns an empty list if no
-    listings match.
+    Only listings with a non-null `price` are considered. `make`/`model`
+    optionally narrow the listings considered (e.g. for the stats page's
+    scope controls). By default (`include_inactive=False`) only
+    `active=True` listings are included; `include_inactive=True` includes
+    all listings regardless of `active`. Rows are ordered by `make`, then
+    `model`. Returns an empty list if no listings match.
     """
     stmt = (
         select(
@@ -185,6 +142,10 @@ def model_overview_stats(
         .order_by(CarListing.make, CarListing.model)
     )
     stmt = _apply_active_filter(stmt, include_inactive)
+    if make is not None:
+        stmt = stmt.where(CarListing.make == make)
+    if model is not None:
+        stmt = stmt.where(CarListing.model == model)
 
     return [
         ModelOverviewStats(

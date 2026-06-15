@@ -27,7 +27,7 @@ from carscraper.services.scrape_status import (
     launch_dealer_scrape,
     list_dealer_scrape_status,
 )
-from carscraper.services.stats import avg_price_per_model, price_history
+from carscraper.services.stats import model_overview_stats, price_history
 from carscraper.services.tracked_models import (
     create_tracked_model,
     delete_tracked_model,
@@ -266,19 +266,41 @@ def listing_detail(request: Request, listing_id: int) -> HTMLResponse:
 
 
 @router.get("/stats", response_class=HTMLResponse)
-def stats_page(request: Request) -> HTMLResponse:
-    """Render the stats summary page: average price per tracked model.
+def stats_page(
+    request: Request,
+    make: str | None = None,
+    model: str | None = None,
+    include_inactive: str | None = None,
+) -> HTMLResponse:
+    """Render the stats summary page: per-(make, model) price overview.
 
-    With no active listings (or none with a price), renders an empty-state
+    `make`/`model` (both optional) scope the overview to a single tracked
+    model — set via the table's row links — with "All models" (no query
+    params) showing every tracked model combined. `include_inactive`
+    (checkbox, present/"true" when checked) toggles whether inactive
+    listings are included; the default (unset) is active-only.
+
+    With no matching listings (or none with a price), renders an empty-state
     message instead of an empty table.
     """
+    make = make or None
+    model = model or None
+    show_inactive = bool(include_inactive)
+
     with get_session() as session:
-        model_stats = avg_price_per_model(session)
+        model_stats = model_overview_stats(
+            session, make=make, model=model, include_inactive=show_inactive
+        )
 
     return templates.TemplateResponse(
         request,
         "stats.html",
-        {"model_stats": model_stats},
+        {
+            "model_stats": model_stats,
+            "make": make,
+            "model": model,
+            "include_inactive": show_inactive,
+        },
     )
 
 

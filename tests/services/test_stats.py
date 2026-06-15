@@ -1,10 +1,11 @@
-"""Tests for `services.stats` (CAR-8, CAR-19).
+"""Tests for `services.stats` (CAR-8, CAR-19, CAR-20).
 
-`avg_price_per_model` and `price_history` are exercised against a seeded
-temporary SQLite database, covering populated and empty cases.
-`model_overview_stats`, `year_bucket_stats`, and `mileage_bucket_stats`
-(CAR-19) are exercised against a second seeded database covering rollups,
-bucket boundaries, "Unknown" buckets, and the `include_inactive` toggle.
+`price_history` is exercised against a seeded temporary SQLite database,
+covering populated and empty cases. `model_overview_stats`,
+`year_bucket_stats`, and `mileage_bucket_stats` (CAR-19) are exercised
+against a second seeded database covering rollups, bucket boundaries,
+"Unknown" buckets, the `include_inactive` toggle, and (CAR-20)
+`model_overview_stats`'s `make`/`model` scoping.
 """
 
 from __future__ import annotations
@@ -18,7 +19,6 @@ from sqlalchemy.orm import Session
 from carscraper.db.models import CarListing, Dealer, PriceSnapshot
 from carscraper.db.session import Base, create_db_engine
 from carscraper.services.stats import (
-    avg_price_per_model,
     mileage_bucket_stats,
     model_overview_stats,
     price_history,
@@ -99,34 +99,6 @@ def seeded(session: Session) -> dict[str, object]:
         "volvo_inactive": volvo_inactive,
         "kia_no_price": kia_no_price,
     }
-
-
-def test_avg_price_per_model_empty(session: Session) -> None:
-    assert avg_price_per_model(session) == []
-
-
-def test_avg_price_per_model_averages_active_listings_with_price(
-    session: Session, seeded: dict[str, object]
-) -> None:
-    results = avg_price_per_model(session)
-
-    # Only the two active Volvo V70 T5 listings (with a price) contribute;
-    # the inactive one and the price-less Kia are excluded.
-    assert len(results) == 1
-    row = results[0]
-    assert row.make == "Volvo"
-    assert row.model == "V70"
-    assert row.variant == "T5"
-    assert row.avg_price == pytest.approx(160_000)
-    assert row.listing_count == 2
-
-
-def test_avg_price_per_model_excludes_listings_without_price(
-    session: Session, seeded: dict[str, object]
-) -> None:
-    results = avg_price_per_model(session)
-
-    assert all(row.make != "Kia" for row in results)
 
 
 def test_price_history_empty(session: Session, seeded: dict[str, object]) -> None:
@@ -283,6 +255,23 @@ def test_model_overview_stats_ordered_by_make_model(
     results = model_overview_stats(session)
 
     assert [(row.make, row.model) for row in results] == [("Kia", "Sportage"), ("Volvo", "V70")]
+
+
+def test_model_overview_stats_filtered_by_make_and_model(
+    session: Session, bucket_seeded: dict[str, object]
+) -> None:
+    results = model_overview_stats(session, make="Volvo", model="V70")
+
+    assert [(row.make, row.model) for row in results] == [("Volvo", "V70")]
+    assert results[0].listing_count == 3  # active Volvo V70s only
+
+
+def test_model_overview_stats_filtered_by_make_only(
+    session: Session, bucket_seeded: dict[str, object]
+) -> None:
+    results = model_overview_stats(session, make="Kia")
+
+    assert [(row.make, row.model) for row in results] == [("Kia", "Sportage")]
 
 
 def test_year_bucket_stats_empty(session: Session) -> None:
