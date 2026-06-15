@@ -1,4 +1,4 @@
-"""Aggregation queries for meta-information (CAR-8, CAR-19).
+"""Aggregation queries for meta-information (CAR-8, CAR-19, CAR-24).
 
 Per CLAUDE.md, routers/web never construct SQL/ORM queries directly — they
 call into this module. This module provides:
@@ -7,22 +7,38 @@ call into this module. This module provides:
   `CarListing`'s `PriceSnapshot` rows, in chronological order, for the
   per-listing price-history chart.
 - `model_overview_stats`: per-`(make, model)` rollup (variants combined) of
-  avg/min/max price and listing count, for the rebuilt stats page (CAR-20).
+  avg/min/max/median price and listing count, for the rebuilt stats page
+  (CAR-20).
 - `year_bucket_stats`: per construction-year listing count and price range,
   with an "Unknown" bucket for listings with no `year`.
 - `mileage_bucket_stats`: per fixed mileage-range listing count and price
   range, with "30000+" and "Unknown" buckets.
+
+CAR-24: price aggregates (`avg_price`/`min_price`/`max_price`/`median_price`)
+are computed only over "usable" prices — see `_usable_prices` — while
+`listing_count` reflects every listing in scope (priced, unpriced, and
+"low bid" listings whose price is excluded from the aggregates).
+`excluded_count` reports how many of those in-scope listings were left out of
+the price aggregates.
 """
 
 from __future__ import annotations
 
+import statistics
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Case, case, func, select
+from sqlalchemy import Case, case, select
 from sqlalchemy.orm import Session
 
 from carscraper.db.models import CarListing, PriceSnapshot
+
+# A non-null price counts toward avg/min/max/median only if it's at least
+# this fraction of the preliminary median price for its scope. Prices below
+# this threshold are treated as "low bid" placeholders (e.g. a KVD auction's
+# current/leading bid) rather than real asking prices.
+LOW_BID_THRESHOLD = 0.66
 
 # Fixed mileage buckets (CAR-19), in display order. Each tuple is
 # `(label, lower_bound_inclusive, upper_bound_inclusive)`; `upper_bound`
@@ -53,14 +69,23 @@ class PricePoint:
 
 @dataclass(frozen=True)
 class ModelOverviewStats:
-    """Price stats for a `(make, model)` group, with variants rolled up."""
+    """Price stats for a `(make, model)` group, with variants rolled up.
+
+    `listing_count` is every listing in the group (priced, unpriced, or
+    "low bid" — see module docstring). `avg_price`/`min_price`/`max_price`/
+    `median_price` are computed only over "usable" prices and are `None` if
+    the group has no usable price. `excluded_count` is the number of
+    listings in the group with no usable price.
+    """
 
     make: str
     model: str
-    avg_price: float
-    min_price: int
-    max_price: int
+    avg_price: float | None
+    min_price: int | None
+    max_price: int | None
+    median_price: float | None
     listing_count: int
+    excluded_count: int
 
 
 @dataclass(frozen=True)
@@ -68,12 +93,19 @@ class YearBucketStats:
     """Listing count and price range for a construction-year bucket.
 
     `year` is `None` for the "Unknown" bucket (listings with no `year`).
+    `listing_count` is every listing in the bucket; `avg_price`/`min_price`/
+    `max_price`/`median_price` are computed only over "usable" prices (within
+    the page's overall make/model scope — see module docstring) and are
+    `None` if the bucket has no usable price. `excluded_count` is the number
+    of listings in the bucket with no usable price.
     """
 
     year: int | None
     listing_count: int
-    min_price: int
-    max_price: int
+    min_price: int | None
+    max_price: int | None
+    median_price: float | None
+    excluded_count: int
 
 
 @dataclass(frozen=True)
@@ -81,13 +113,20 @@ class MileageBucketStats:
     """Listing count and price range for a fixed mileage bucket.
 
     `bucket` is one of the labels in `MILEAGE_BUCKETS`, or
-    `MILEAGE_BUCKET_UNKNOWN` for listings with no `mileage`.
+    `MILEAGE_BUCKET_UNKNOWN` for listings with no `mileage`. `listing_count`
+    is every listing in the bucket; `avg_price`/`min_price`/`max_price`/
+    `median_price` are computed only over "usable" prices (within the page's
+    overall make/model scope — see module docstring) and are `None` if the
+    bucket has no usable price. `excluded_count` is the number of listings in
+    the bucket with no usable price.
     """
 
     bucket: str
     listing_count: int
-    min_price: int
-    max_price: int
+    min_price: int | None
+    max_price: int | None
+    median_price: float | None
+    excluded_count: int
 
 
 def price_history(session: Session, listing_id: int) -> list[PricePoint]:
@@ -113,6 +152,63 @@ def _apply_active_filter(stmt, include_inactive: bool):  # type: ignore[no-untyp
     return stmt
 
 
+def _usable_prices(prices: list[int]) -> list[int]:
+    """Return the subset of `prices` usable for avg/min/max/median.
+
+    Two-pass (CAR-24): a preliminary median is computed over all non-null
+    `prices`. A price is "usable" only if it's `>= LOW_BID_THRESHOLD` times
+    that preliminary median (filtering out "low bid" placeholders like a KVD
+    auction's current/leading bid). If `prices` is empty, returns an empty
+    list.
+    """
+    if not prices:
+        return []
+
+    preliminary_median = statistics.median(prices)
+    threshold = LOW_BID_THRESHOLD * preliminary_median
+    return [price for price in prices if price >= threshold]
+
+
+@dataclass(frozen=True)
+class _PriceStats:
+    """Usable-price aggregates derived from `_usable_prices`."""
+
+    avg_price: float | None
+    min_price: int | None
+    max_price: int | None
+    median_price: float | None
+    excluded_count: int
+
+
+def _price_stats(all_prices: list[int | None]) -> _PriceStats:
+    """Compute usable-price aggregates and the excluded count for a group.
+
+    `all_prices` is every listing's `price` in the group/bucket (including
+    `None` for unpriced listings). Returns `None` aggregates if no price is
+    usable.
+    """
+    non_null_prices = [price for price in all_prices if price is not None]
+    usable = _usable_prices(non_null_prices)
+    excluded_count = len(all_prices) - len(usable)
+
+    if not usable:
+        return _PriceStats(
+            avg_price=None,
+            min_price=None,
+            max_price=None,
+            median_price=None,
+            excluded_count=excluded_count,
+        )
+
+    return _PriceStats(
+        avg_price=statistics.mean(usable),
+        min_price=min(usable),
+        max_price=max(usable),
+        median_price=statistics.median(usable),
+        excluded_count=excluded_count,
+    )
+
+
 def model_overview_stats(
     session: Session,
     make: str | None = None,
@@ -121,25 +217,19 @@ def model_overview_stats(
 ) -> list[ModelOverviewStats]:
     """Return per-`(make, model)` price stats with variants rolled up.
 
-    Only listings with a non-null `price` are considered. `make`/`model`
-    optionally narrow the listings considered (e.g. for the stats page's
-    scope controls). By default (`include_inactive=False`) only
-    `active=True` listings are included; `include_inactive=True` includes
-    all listings regardless of `active`. Rows are ordered by `make`, then
-    `model`. Returns an empty list if no listings match.
+    `listing_count` is every listing in the `(make, model)` group (priced,
+    unpriced, or "low bid"). `avg_price`/`min_price`/`max_price`/
+    `median_price` are computed only over "usable" prices for that group —
+    see module docstring — and are `None` if the group has no usable price.
+    `excluded_count` is the number of listings in the group with no usable
+    price. `make`/`model` optionally narrow the listings considered (e.g. for
+    the stats page's scope controls). By default (`include_inactive=False`)
+    only `active=True` listings are included; `include_inactive=True`
+    includes all listings regardless of `active`. Rows are ordered by `make`,
+    then `model`. Returns an empty list if no listings match.
     """
-    stmt = (
-        select(
-            CarListing.make,
-            CarListing.model,
-            func.avg(CarListing.price).label("avg_price"),
-            func.min(CarListing.price).label("min_price"),
-            func.max(CarListing.price).label("max_price"),
-            func.count(CarListing.id).label("listing_count"),
-        )
-        .where(CarListing.price.is_not(None))
-        .group_by(CarListing.make, CarListing.model)
-        .order_by(CarListing.make, CarListing.model)
+    stmt = select(CarListing.make, CarListing.model, CarListing.price).order_by(
+        CarListing.make, CarListing.model
     )
     stmt = _apply_active_filter(stmt, include_inactive)
     if make is not None:
@@ -147,17 +237,27 @@ def model_overview_stats(
     if model is not None:
         stmt = stmt.where(CarListing.model == model)
 
-    return [
-        ModelOverviewStats(
-            make=row.make,
-            model=row.model,
-            avg_price=float(row.avg_price),
-            min_price=row.min_price,
-            max_price=row.max_price,
-            listing_count=row.listing_count,
+    prices_by_group: dict[tuple[str, str], list[int | None]] = defaultdict(list)
+    for row in session.execute(stmt):
+        prices_by_group[(row.make, row.model)].append(row.price)
+
+    results = []
+    for (group_make, group_model), prices in prices_by_group.items():
+        price_stats = _price_stats(prices)
+        results.append(
+            ModelOverviewStats(
+                make=group_make,
+                model=group_model,
+                avg_price=price_stats.avg_price,
+                min_price=price_stats.min_price,
+                max_price=price_stats.max_price,
+                median_price=price_stats.median_price,
+                listing_count=len(prices),
+                excluded_count=price_stats.excluded_count,
+            )
         )
-        for row in session.execute(stmt)
-    ]
+
+    return sorted(results, key=lambda row: (row.make, row.model))
 
 
 def year_bucket_stats(
@@ -166,41 +266,63 @@ def year_bucket_stats(
     model: str | None = None,
     include_inactive: bool = False,
 ) -> list[YearBucketStats]:
-    """Return per construction-year listing count and price range.
+    """Return per construction-year listing count and price stats.
 
     Listings with a null `year` are rolled up into a single bucket
     (`year=None` in the result). `make`/`model` optionally narrow the
-    listings considered; only listings with a non-null `price` are
-    included. By default (`include_inactive=False`) only `active=True`
-    listings are included. Rows are ordered by `year` ascending, with the
-    "Unknown" (`year=None`) bucket last.
+    listings considered; `listing_count` is every listing in the bucket
+    (priced, unpriced, or "low bid"). `avg_price`/`min_price`/`max_price`/
+    `median_price` are computed only over "usable" prices — see module
+    docstring — where the "scope" for the preliminary median is all listings
+    matched by `make`/`model`/`include_inactive` (the page's current scope),
+    not just this bucket. Buckets with no usable price report `None` for
+    those fields. `excluded_count` is the number of listings in the bucket
+    with no usable price. By default (`include_inactive=False`) only
+    `active=True` listings are included. Rows are ordered by `year`
+    ascending, with the "Unknown" (`year=None`) bucket last.
     """
-    stmt = (
-        select(
-            CarListing.year,
-            func.count(CarListing.id).label("listing_count"),
-            func.min(CarListing.price).label("min_price"),
-            func.max(CarListing.price).label("max_price"),
-        )
-        .where(CarListing.price.is_not(None))
-        .group_by(CarListing.year)
-        .order_by(CarListing.year.is_(None), CarListing.year)
-    )
+    stmt = select(CarListing.year, CarListing.price)
     stmt = _apply_active_filter(stmt, include_inactive)
     if make is not None:
         stmt = stmt.where(CarListing.make == make)
     if model is not None:
         stmt = stmt.where(CarListing.model == model)
 
-    return [
-        YearBucketStats(
-            year=row.year,
-            listing_count=row.listing_count,
-            min_price=row.min_price,
-            max_price=row.max_price,
+    prices_by_bucket: dict[int | None, list[int | None]] = defaultdict(list)
+    scope_prices: list[int] = []
+    for row in session.execute(stmt):
+        prices_by_bucket[row.year].append(row.price)
+        if row.price is not None:
+            scope_prices.append(row.price)
+
+    usable_in_scope = set(_usable_prices(scope_prices))
+
+    results = []
+    for year, prices in prices_by_bucket.items():
+        usable = [price for price in prices if price is not None and price in usable_in_scope]
+        excluded_count = len(prices) - len(usable)
+
+        if usable:
+            min_price: int | None = min(usable)
+            max_price: int | None = max(usable)
+            median_price: float | None = statistics.median(usable)
+        else:
+            min_price = None
+            max_price = None
+            median_price = None
+
+        results.append(
+            YearBucketStats(
+                year=year,
+                listing_count=len(prices),
+                min_price=min_price,
+                max_price=max_price,
+                median_price=median_price,
+                excluded_count=excluded_count,
+            )
         )
-        for row in session.execute(stmt)
-    ]
+
+    return sorted(results, key=lambda row: (row.year is None, row.year))
 
 
 def _mileage_bucket_case() -> Case[str]:
@@ -226,43 +348,62 @@ def mileage_bucket_stats(
     model: str | None = None,
     include_inactive: bool = False,
 ) -> list[MileageBucketStats]:
-    """Return per fixed-mileage-bucket listing count and price range.
+    """Return per fixed-mileage-bucket listing count and price stats.
 
     Buckets follow `MILEAGE_BUCKETS` (0-2000 ... 22001-30000, "30000+"),
     plus `MILEAGE_BUCKET_UNKNOWN` for listings with a null `mileage`.
-    `make`/`model` optionally narrow the listings considered; only listings
-    with a non-null `price` are included. By default
-    (`include_inactive=False`) only `active=True` listings are included.
-    Only buckets containing at least one matching listing are returned,
-    ordered as in `MILEAGE_BUCKETS` with "Unknown" last.
+    `make`/`model` optionally narrow the listings considered; `listing_count`
+    is every listing in the bucket (priced, unpriced, or "low bid").
+    `avg_price`/`min_price`/`max_price`/`median_price` are computed only over
+    "usable" prices — see module docstring — where the "scope" for the
+    preliminary median is all listings matched by
+    `make`/`model`/`include_inactive` (the page's current scope), not just
+    this bucket. Buckets with no usable price report `None` for those fields.
+    `excluded_count` is the number of listings in the bucket with no usable
+    price. By default (`include_inactive=False`) only `active=True` listings
+    are included. Only buckets containing at least one matching listing are
+    returned, ordered as in `MILEAGE_BUCKETS` with "Unknown" last.
     """
     bucket_expr = _mileage_bucket_case()
 
-    stmt = (
-        select(
-            bucket_expr.label("bucket"),
-            func.count(CarListing.id).label("listing_count"),
-            func.min(CarListing.price).label("min_price"),
-            func.max(CarListing.price).label("max_price"),
-        )
-        .where(CarListing.price.is_not(None))
-        .group_by(bucket_expr)
-    )
+    stmt = select(bucket_expr.label("bucket"), CarListing.price)
     stmt = _apply_active_filter(stmt, include_inactive)
     if make is not None:
         stmt = stmt.where(CarListing.make == make)
     if model is not None:
         stmt = stmt.where(CarListing.model == model)
 
-    rows_by_bucket = {
-        row.bucket: MileageBucketStats(
-            bucket=row.bucket,
-            listing_count=row.listing_count,
-            min_price=row.min_price,
-            max_price=row.max_price,
+    prices_by_bucket: dict[str, list[int | None]] = defaultdict(list)
+    scope_prices: list[int] = []
+    for row in session.execute(stmt):
+        prices_by_bucket[row.bucket].append(row.price)
+        if row.price is not None:
+            scope_prices.append(row.price)
+
+    usable_in_scope = set(_usable_prices(scope_prices))
+
+    rows_by_bucket: dict[str, MileageBucketStats] = {}
+    for bucket, prices in prices_by_bucket.items():
+        usable = [price for price in prices if price is not None and price in usable_in_scope]
+        excluded_count = len(prices) - len(usable)
+
+        if usable:
+            min_price: int | None = min(usable)
+            max_price: int | None = max(usable)
+            median_price: float | None = statistics.median(usable)
+        else:
+            min_price = None
+            max_price = None
+            median_price = None
+
+        rows_by_bucket[bucket] = MileageBucketStats(
+            bucket=bucket,
+            listing_count=len(prices),
+            min_price=min_price,
+            max_price=max_price,
+            median_price=median_price,
+            excluded_count=excluded_count,
         )
-        for row in session.execute(stmt)
-    }
 
     bucket_order = [label for label, _, _ in MILEAGE_BUCKETS] + [MILEAGE_BUCKET_UNKNOWN]
     return [rows_by_bucket[bucket] for bucket in bucket_order if bucket in rows_by_bucket]

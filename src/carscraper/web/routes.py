@@ -307,11 +307,14 @@ def stats_page(
 
     year_labels = [str(row.year) if row.year is not None else "Unknown" for row in year_stats]
     year_counts = [row.listing_count for row in year_stats]
-    year_price_ranges = [[row.min_price, row.max_price] for row in year_stats]
+    # `min_price`/`max_price` are `None` when a bucket has no "usable" price
+    # (CAR-24); fall back to `[0, 0]` so the chart renders an empty range
+    # rather than `null` (full chart redesign is CAR-25).
+    year_price_ranges = [[row.min_price or 0, row.max_price or 0] for row in year_stats]
 
     mileage_labels = [row.bucket for row in mileage_stats]
     mileage_counts = [row.listing_count for row in mileage_stats]
-    mileage_price_ranges = [[row.min_price, row.max_price] for row in mileage_stats]
+    mileage_price_ranges = [[row.min_price or 0, row.max_price or 0] for row in mileage_stats]
 
     # Map each mileage bucket label to the `min_mileage`/`max_mileage`/
     # `mileage_unknown` drill-down params for CAR-22's chart onClick handler

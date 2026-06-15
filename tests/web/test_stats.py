@@ -87,7 +87,7 @@ def test_stats_page_empty_state(db_session: Session) -> None:
     response = client.get("/stats")
 
     assert response.status_code == 200
-    assert "No active listings with a price yet" in response.text
+    assert "No active listings yet" in response.text
 
 
 def test_stats_page_with_rows(db_session: Session) -> None:
@@ -99,16 +99,21 @@ def test_stats_page_with_rows(db_session: Session) -> None:
     assert "Volvo" in response.text
     assert "V70" in response.text
     assert "189 000 kr" in response.text
-    assert "No active listings with a price yet" not in response.text
+    assert "No active listings yet" not in response.text
 
 
-def test_stats_page_excludes_listings_without_price(db_session: Session) -> None:
+def test_stats_page_includes_listings_without_price(db_session: Session) -> None:
+    """CAR-24: an unpriced listing still appears (counted), with a dash for price."""
     _seed_listing(db_session, price=None)
 
     response = client.get("/stats")
 
     assert response.status_code == 200
-    assert "No active listings with a price yet" in response.text
+    assert "No active listings yet" not in response.text
+    assert "Volvo" in response.text
+    assert "V70" in response.text
+    # listing_count is 1, but excluded_count is also 1 (no usable price).
+    assert "1 excluded" in response.text
 
 
 def test_stats_page_rolls_up_variants(db_session: Session) -> None:
@@ -177,9 +182,11 @@ def test_stats_page_distribution_charts_render(db_session: Session) -> None:
 
 
 def test_stats_page_year_bucket_chart_data(db_session: Session) -> None:
+    # Prices are all within 66% of the scope's preliminary median (150k), so
+    # none are treated as "low bid" / excluded.
     _seed_listing(db_session, external_id="1", year=2018, mileage=5_000, price=150_000)
     _seed_listing(db_session, external_id="2", year=2020, mileage=5_000, price=200_000)
-    _seed_listing(db_session, external_id="3", year=None, mileage=5_000, price=50_000)
+    _seed_listing(db_session, external_id="3", year=None, mileage=5_000, price=120_000)
 
     response = client.get("/stats")
 
@@ -189,20 +196,22 @@ def test_stats_page_year_bucket_chart_data(db_session: Session) -> None:
     # Counts: one listing per bucket.
     assert "[1, 1, 1]" in response.text
     # Price ranges: each bucket has a single listing, so min == max.
-    assert "[[150000, 150000], [200000, 200000], [50000, 50000]]" in response.text
+    assert "[[150000, 150000], [200000, 200000], [120000, 120000]]" in response.text
 
 
 def test_stats_page_mileage_bucket_chart_data(db_session: Session) -> None:
+    # Prices are all within 66% of the scope's preliminary median (120k), so
+    # none are treated as "low bid" / excluded.
     _seed_listing(db_session, external_id="1", year=2018, mileage=1_000, price=150_000)
-    _seed_listing(db_session, external_id="2", year=2018, mileage=35_000, price=50_000)
-    _seed_listing(db_session, external_id="3", year=2018, mileage=None, price=80_000)
+    _seed_listing(db_session, external_id="2", year=2018, mileage=35_000, price=100_000)
+    _seed_listing(db_session, external_id="3", year=2018, mileage=None, price=120_000)
 
     response = client.get("/stats")
 
     assert response.status_code == 200
     # Fixed bucket order: only buckets with data are returned, "30000+" before "Unknown".
     assert '"0-2000", "30000+", "Unknown"' in response.text
-    assert "[[150000, 150000], [50000, 50000], [80000, 80000]]" in response.text
+    assert "[[150000, 150000], [100000, 100000], [120000, 120000]]" in response.text
 
 
 def test_stats_page_distribution_charts_scoped_by_make_and_model(db_session: Session) -> None:

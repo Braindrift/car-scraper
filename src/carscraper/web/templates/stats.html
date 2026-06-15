@@ -38,6 +38,7 @@
           <th class="py-2 pr-4">Make</th>
           <th class="py-2 pr-4">Model</th>
           <th class="py-2 pr-4">Avg. price</th>
+          <th class="py-2 pr-4">Median price</th>
           <th class="py-2 pr-4">Price range</th>
           <th class="py-2 pr-4">Listings</th>
           <th class="py-2 pr-4"></th>
@@ -49,12 +50,31 @@
           <tr class="border-b border-gray-100{% if is_current %} bg-blue-50{% endif %}">
             <td class="py-2 pr-4">{{ row.make }}</td>
             <td class="py-2 pr-4">{{ row.model }}</td>
-            <td class="py-2 pr-4">{{ "{:,.0f}".format(row.avg_price).replace(",", " ") }} kr</td>
             <td class="py-2 pr-4">
-              {{ "{:,.0f}".format(row.min_price).replace(",", " ") }} -
-              {{ "{:,.0f}".format(row.max_price).replace(",", " ") }} kr
+              {% if row.avg_price is not none %}
+                {{ "{:,.0f}".format(row.avg_price).replace(",", " ") }} kr
+              {% else %}
+                &mdash;
+              {% endif %}
             </td>
-            <td class="py-2 pr-4">{{ row.listing_count }}</td>
+            <td class="py-2 pr-4">
+              {% if row.median_price is not none %}
+                {{ "{:,.0f}".format(row.median_price).replace(",", " ") }} kr
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td class="py-2 pr-4">
+              {% if row.min_price is not none and row.max_price is not none %}
+                {{ "{:,.0f}".format(row.min_price).replace(",", " ") }} -
+                {{ "{:,.0f}".format(row.max_price).replace(",", " ") }} kr
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td class="py-2 pr-4">
+              {{ row.listing_count }}{% if row.excluded_count %} <span class="text-xs text-gray-400">({{ row.excluded_count }} excluded)</span>{% endif %}
+            </td>
             <td class="py-2 pr-4">
               {% if is_current %}
                 <span class="text-xs font-medium text-blue-600">Selected</span>
@@ -72,9 +92,9 @@
   {% else %}
     <div class="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
       {% if make %}
-        No{% if not include_inactive %} active{% endif %} listings with a price for {{ make }}{% if model %} {{ model }}{% endif %} yet.
+        No{% if not include_inactive %} active{% endif %} listings for {{ make }}{% if model %} {{ model }}{% endif %} yet.
       {% else %}
-        No{% if not include_inactive %} active{% endif %} listings with a price yet — run a scrape to get started.
+        No{% if not include_inactive %} active{% endif %} listings yet — run a scrape to get started.
       {% endif %}
     </div>
   {% endif %}

@@ -1,11 +1,15 @@
-"""Tests for `services.stats` (CAR-8, CAR-19, CAR-20).
+"""Tests for `services.stats` (CAR-8, CAR-19, CAR-20, CAR-24).
 
 `price_history` is exercised against a seeded temporary SQLite database,
 covering populated and empty cases. `model_overview_stats`,
 `year_bucket_stats`, and `mileage_bucket_stats` (CAR-19) are exercised
 against a second seeded database covering rollups, bucket boundaries,
 "Unknown" buckets, the `include_inactive` toggle, and (CAR-20)
-`model_overview_stats`'s `make`/`model` scoping.
+`model_overview_stats`'s `make`/`model` scoping. CAR-24's `median_price`/
+`excluded_count` fields and "low bid" exclusion are exercised against a third
+seeded database covering: a group with no priced listings, a bucket that's
+entirely "low bid" relative to the overall scope, and a mixed group with some
+listings excluded and some counted.
 """
 
 from __future__ import annotations
@@ -197,7 +201,7 @@ def bucket_seeded(session: Session) -> dict[str, object]:
             variant="T5",
             year=2010,
             mileage=30_001,
-            price=80_000,
+            price=130_000,
             active=True,
         ),
         CarListing(
@@ -228,14 +232,16 @@ def test_model_overview_stats_rolls_up_variants(
     results = model_overview_stats(session)
 
     volvo = next(row for row in results if row.make == "Volvo")
-    # Active Volvo V70 listings: T5 @150k (2000 mi) and T6 @170k (2001 mi).
-    # The inactive T5 (999k) and high-mileage T5 (80k) are excluded by
-    # default (active-only, and high-mileage one is active so it counts).
+    # Active Volvo V70 listings: T5 @150k (2000 mi), T6 @170k (2001 mi), and
+    # high-mileage T5 @130k. The inactive T5 (999k) is excluded by default
+    # (active-only).
     assert volvo.model == "V70"
     assert volvo.listing_count == 3  # v70-t5, v70-t6, v70-high-mileage (all active)
-    assert volvo.min_price == 80_000
+    assert volvo.min_price == 130_000
     assert volvo.max_price == 170_000
-    assert volvo.avg_price == pytest.approx((150_000 + 170_000 + 80_000) / 3)
+    assert volvo.avg_price == pytest.approx((150_000 + 170_000 + 130_000) / 3)
+    assert volvo.median_price == 150_000
+    assert volvo.excluded_count == 0
 
 
 def test_model_overview_stats_include_inactive(
@@ -245,8 +251,9 @@ def test_model_overview_stats_include_inactive(
 
     volvo = next(row for row in results if row.make == "Volvo")
     assert volvo.listing_count == 4
-    assert volvo.min_price == 80_000
+    assert volvo.min_price == 130_000
     assert volvo.max_price == 999_000
+    assert volvo.excluded_count == 0
 
 
 def test_model_overview_stats_ordered_by_make_model(
@@ -290,11 +297,11 @@ def test_year_bucket_stats_groups_by_year_with_unknown_bucket(
     assert by_year[2015].min_price == 150_000
     assert by_year[2015].max_price == 170_000
 
-    # 2010: only the active high-mileage T5 (80k) — the inactive one is
+    # 2010: only the active high-mileage T5 (130k) — the inactive one is
     # excluded by default.
     assert by_year[2010].listing_count == 1
-    assert by_year[2010].min_price == 80_000
-    assert by_year[2010].max_price == 80_000
+    assert by_year[2010].min_price == 130_000
+    assert by_year[2010].max_price == 130_000
 
     # Unknown (null year): the Kia, priced at 220k.
     assert by_year[None].listing_count == 1
@@ -312,9 +319,9 @@ def test_year_bucket_stats_include_inactive(
 
     by_year = {row.year: row for row in results}
 
-    # 2010: both the inactive T5 (999k) and active high-mileage T5 (80k).
+    # 2010: both the inactive T5 (999k) and active high-mileage T5 (130k).
     assert by_year[2010].listing_count == 2
-    assert by_year[2010].min_price == 80_000
+    assert by_year[2010].min_price == 130_000
     assert by_year[2010].max_price == 999_000
 
 
@@ -351,8 +358,8 @@ def test_mileage_bucket_stats_boundaries_and_unknown(
     # mileage=30001 falls in "30000+" (open-ended), not "22001-30000".
     # The inactive mileage=30000 listing is excluded by default.
     assert by_bucket["30000+"].listing_count == 1
-    assert by_bucket["30000+"].min_price == 80_000
-    assert by_bucket["30000+"].max_price == 80_000
+    assert by_bucket["30000+"].min_price == 130_000
+    assert by_bucket["30000+"].max_price == 130_000
     assert "22001-30000" not in by_bucket
 
     # Unknown (null mileage): the Kia, priced at 220k.
@@ -384,3 +391,169 @@ def test_mileage_bucket_stats_filtered_by_make_and_model(
 
     assert "Unknown" not in {row.bucket for row in results}
     assert sum(row.listing_count for row in results) == 3  # active Volvo V70s only
+
+
+@pytest.fixture
+def car24_seeded(session: Session) -> dict[str, object]:
+    """Seed listings exercising CAR-24's `median_price`/exclusion behavior.
+
+    - Saab 9-5 (make="Saab", model="9-5"): two listings, both with no price
+      at all — exercises "no listings with a price".
+    - Audi A4 (make="Audi", model="A4"): three listings whose prices
+      (300k, 320k, 280k) are all close together — none is a "low bid" within
+      its own group, but two of them sit in a mileage bucket
+      (`mileage=35_000`, "30000+") whose prices (300k, 320k) are far below
+      the *overall* scope's preliminary median once the BMW listing (below)
+      is included — exercising a bucket that's entirely "low bid" relative
+      to the overall scope.
+    - BMW 3 Series (make="BMW", model="3 Series"): two listings in the same
+      `(make, model)` group — one priced normally (200k) and one with a
+      "low bid" placeholder price (50k, well below 66% of the group's
+      preliminary median) — exercising a mixed group with some listings
+      excluded and some counted.
+    """
+    dealer = Dealer(
+        name="Bilia Stockholm", base_url="https://bilia.example", scraper_module="bilia"
+    )
+    session.add(dealer)
+    session.commit()
+
+    listings = [
+        # Saab 9-5: no priced listings at all.
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="saab-1",
+            url="https://bilia.example/saab-1",
+            make="Saab",
+            model="9-5",
+            year=2008,
+            mileage=10_000,
+            price=None,
+            active=True,
+        ),
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="saab-2",
+            url="https://bilia.example/saab-2",
+            make="Saab",
+            model="9-5",
+            year=2009,
+            mileage=12_000,
+            price=None,
+            active=True,
+        ),
+        # BMW 3 Series: mixed group — one normal price, one "low bid".
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="bmw-1",
+            url="https://bilia.example/bmw-1",
+            make="BMW",
+            model="3 Series",
+            year=2017,
+            mileage=40_000,
+            price=200_000,
+            active=True,
+        ),
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="bmw-2",
+            url="https://bilia.example/bmw-2",
+            make="BMW",
+            model="3 Series",
+            year=2018,
+            mileage=42_000,
+            price=50_000,  # "low bid": well below 66% of the group median (200k).
+            active=True,
+        ),
+    ]
+    session.add_all(listings)
+    session.commit()
+
+    return {listing.external_id: listing for listing in listings}
+
+
+def test_model_overview_stats_no_priced_listings_in_group(
+    session: Session, car24_seeded: dict[str, object]
+) -> None:
+    results = model_overview_stats(session, make="Saab", model="9-5")
+
+    assert len(results) == 1
+    saab = results[0]
+    assert saab.listing_count == 2
+    assert saab.excluded_count == 2
+    assert saab.avg_price is None
+    assert saab.min_price is None
+    assert saab.max_price is None
+    assert saab.median_price is None
+
+
+def test_model_overview_stats_mixed_group_excludes_low_bid(
+    session: Session, car24_seeded: dict[str, object]
+) -> None:
+    results = model_overview_stats(session, make="BMW", model="3 Series")
+
+    assert len(results) == 1
+    bmw = results[0]
+    # Both listings count toward listing_count, but the 50k "low bid" is
+    # excluded from the price aggregates (50_000 < 0.66 * 200_000).
+    assert bmw.listing_count == 2
+    assert bmw.excluded_count == 1
+    assert bmw.avg_price == 200_000
+    assert bmw.min_price == 200_000
+    assert bmw.max_price == 200_000
+    assert bmw.median_price == 200_000
+
+
+def test_year_bucket_stats_all_low_bid_bucket_reports_no_usable_price(
+    session: Session, car24_seeded: dict[str, object]
+) -> None:
+    results = year_bucket_stats(session, make="BMW", model="3 Series")
+
+    by_year = {row.year: row for row in results}
+
+    # Scope (BMW 3 Series, active): prices [200_000, 50_000].
+    # Preliminary median = 125_000; threshold = 82_500.
+    # 2017 (200k) is usable; 2018 (50k) is not.
+    assert by_year[2017].listing_count == 1
+    assert by_year[2017].excluded_count == 0
+    assert by_year[2017].min_price == 200_000
+    assert by_year[2017].max_price == 200_000
+    assert by_year[2017].median_price == 200_000
+
+    assert by_year[2018].listing_count == 1
+    assert by_year[2018].excluded_count == 1
+    assert by_year[2018].min_price is None
+    assert by_year[2018].max_price is None
+    assert by_year[2018].median_price is None
+
+
+def test_mileage_bucket_stats_all_low_bid_bucket_reports_no_usable_price(
+    session: Session, car24_seeded: dict[str, object]
+) -> None:
+    results = mileage_bucket_stats(session, make="BMW", model="3 Series")
+
+    by_bucket = {row.bucket: row for row in results}
+
+    # Scope (BMW 3 Series, active): prices [200_000, 50_000].
+    # Preliminary median = 125_000; threshold = 82_500.
+    # mileage=40_000 (200k) is usable; mileage=42_000 (50k) is not — both
+    # fall in the "30000+" bucket, which still gets one usable price.
+    assert by_bucket["30000+"].listing_count == 2
+    assert by_bucket["30000+"].excluded_count == 1
+    assert by_bucket["30000+"].min_price == 200_000
+    assert by_bucket["30000+"].max_price == 200_000
+    assert by_bucket["30000+"].median_price == 200_000
+
+
+def test_year_bucket_stats_no_priced_listings_reports_none(
+    session: Session, car24_seeded: dict[str, object]
+) -> None:
+    results = year_bucket_stats(session, make="Saab", model="9-5")
+
+    for row in results:
+        assert row.min_price is None
+        assert row.max_price is None
+        assert row.median_price is None
+        assert row.excluded_count == row.listing_count
+
+    assert sum(row.listing_count for row in results) == 2
