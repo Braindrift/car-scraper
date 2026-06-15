@@ -9,6 +9,13 @@ icon classes, "mil" mileage units) is translated here and nowhere else.
 Parsing external HTML is a system boundary: a `div.Card` missing its `id`,
 detail-page `href`, `data-brand-name`, or `data-model-name` is skipped with a
 warning rather than raising (mirrors kvd_se's `parse_auction`).
+
+CAR-23: bilweb.se renders every listing *twice* on a search page - once as a
+grid card (`div.Card`, with `dl.Card-carData`) and again as a "row" card
+(`div.Card.Card-row`, with a plain `div.Card-carData--row` text blob and no
+`dl`) sharing the same `id`. Only the grid variant is selected (see
+`parse_listing_cards`); the row variant carries no fuel/transmission data and
+its year/mileage are redundant with the grid variant's `dl.Card-carData`.
 """
 
 from __future__ import annotations
@@ -36,6 +43,10 @@ _TRAILING_YEAR_RE = re.compile(r"\s+\d{4}$")
 
 # Non-digit characters in a price string, e.g. "439 700 kr" -> "439700".
 _NON_DIGITS_RE = re.compile(r"\D+")
+
+# A 4-digit year embedded in a "Tillv.man" (construction month) value, e.g.
+# "2023-11" or "11/2023" -> "2023". Matches the year wherever it falls.
+_YEAR_IN_TEXT_RE = re.compile(r"\b(\d{4})\b")
 
 # 1 "mil" (Swedish mile, used for odometer readings) = 10 km.
 _MIL_TO_KM = 10
@@ -106,16 +117,36 @@ def _derive_mileage(card_data: Tag) -> int | None:
 def _derive_year(card_data: Tag) -> int | None:
     """`Ar:` row's `<dd>` (bilweb labels this "Ar:" with a Swedish A-ring).
 
-    Matches the ASCII fallback "ar:" too, in case of an encoding mishap.
+    Matches the ASCII fallback "ar:" too, in case of an encoding mishap. If
+    no `Ar:`/`ar:` row is present, falls back to a `Tillv.man:`
+    (construction-month) row - a date-ish value like "2023-11" or "11/2023" -
+    and extracts the embedded 4-digit year (see `_YEAR_IN_TEXT_RE`). Bilweb's
+    search-result cards always carry `Ar:`; the `Tillv.man:` fallback exists
+    for markup variants where only construction month is present.
     """
+    year_dd: Tag | None = None
+    tillv_dd: Tag | None = None
+
     for dt in card_data.find_all("dt"):
         label = dt.get_text(strip=True).casefold()
         if label in {"år:", "ar:"}:
-            dd = dt.find_next_sibling("dd")
-            text = dd.get_text(strip=True) if dd is not None else None
-            if text and text.isdigit():
-                return int(text)
-            return None
+            year_dd = dt.find_next_sibling("dd")
+        elif label in {"tillv.mån:", "tillv.man:"}:
+            tillv_dd = dt.find_next_sibling("dd")
+
+    if year_dd is not None:
+        text = year_dd.get_text(strip=True)
+        if text.isdigit():
+            return int(text)
+        return None
+
+    if tillv_dd is not None:
+        text = tillv_dd.get_text(strip=True)
+        match = _YEAR_IN_TEXT_RE.search(text)
+        if match:
+            return int(match.group(1))
+        return None
+
     return None
 
 
@@ -196,13 +227,24 @@ def _parse_card(card: Tag) -> CarListingDTO | None:
         mileage=_derive_mileage(card_data) if card_data is not None else None,
         price=_derive_price(card),
         fuel_type=_derive_fuel_type(card_data) if card_data is not None else None,
-        transmission=None,  # not available on search-result cards (v1 limitation)
+        # Not available on search-result cards (neither the grid nor the row
+        # variant); only the detail page's "Vaxellada:" field has it. Fetching
+        # one detail page per listing is a larger change (N+1 requests) left
+        # for a follow-up ticket.
+        transmission=None,
         image_urls=_derive_image_urls(card),
     )
 
 
 def parse_listing_cards(html: str) -> list[CarListingDTO]:
-    """Parse every `div.Card` on a bilweb.se search page into `CarListingDTO`s.
+    """Parse every grid `div.Card` on a bilweb.se search page into `CarListingDTO`s.
+
+    bilweb.se renders each listing twice: once as a grid card (`div.Card`,
+    with `dl.Card-carData`) and once as a "row" card (`div.Card.Card-row`,
+    with a plain `div.Card-carData--row` text blob and no fuel/transmission
+    data) sharing the same `id`. `div.Card:not(.Card-row)` selects only the
+    grid variant, which is the one that carries `Mil:`/`Ar:`/`Drivmedel:`
+    (CAR-23).
 
     Cards missing a required field are skipped (logged, not raised) - see
     `_parse_card`.
@@ -210,7 +252,7 @@ def parse_listing_cards(html: str) -> list[CarListingDTO]:
     soup = BeautifulSoup(html, "html.parser")
 
     listings: list[CarListingDTO] = []
-    for card in soup.select("div.Card"):
+    for card in soup.select("div.Card:not(.Card-row)"):
         dto = _parse_card(card)
         if dto is not None:
             listings.append(dto)

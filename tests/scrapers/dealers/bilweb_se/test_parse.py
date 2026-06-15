@@ -1,8 +1,13 @@
-"""Tests for `parse_listing_cards`'s field mapping (CAR-18).
+"""Tests for `parse_listing_cards`'s field mapping (CAR-18, CAR-23).
 
 Exercises the field-mapping table from CAR-18 against trimmed real captures
 of `https://bilweb.se/sok/peugeot/5008` (`fixtures/peugeot_5008.html`) and
 `https://bilweb.se/sok/volvo/xc60` (`fixtures/volvo_xc60.html`).
+
+CAR-23 adds `fixtures/volvo_xc60_rows.html`, covering the "row card"
+duplication bug (every search-result listing also appears as a
+`div.Card.Card-row` with no `dl.Card-carData`, sharing the same `id` as its
+grid-card counterpart) plus the `Tillv.mån:` year fallback.
 """
 
 from __future__ import annotations
@@ -110,6 +115,138 @@ def test_diesel_card_with_truncated_heading_mileage_conversion() -> None:
     assert dto.year == 2016
     assert dto.mileage == 206000  # 20 600 mil * 10
     assert dto.fuel_type == "Diesel"
+
+
+# --- volvo_xc60_rows.html (CAR-23: row-card duplication) -----------------------
+
+
+def test_row_card_duplicates_do_not_produce_extra_or_blank_listings() -> None:
+    """Each listing appears as both a grid `div.Card` and a `div.Card.Card-row`
+    sharing the same `id`; only the grid variant is parsed."""
+    dtos = parse_listing_cards(_load("volvo_xc60_rows.html"))
+
+    assert len(dtos) == 3
+    assert {dto.external_id for dto in dtos} == {"12745960", "12745948", "12745866"}
+
+
+def test_row_card_duplicate_does_not_null_out_grid_fields() -> None:
+    """Card 12745960: hybrid, mileage 10 991 mil -> 109 910 km, year 2024 -
+    the grid card's data, not the row card's `None`s."""
+    dtos = _by_id(parse_listing_cards(_load("volvo_xc60_rows.html")))
+    dto = dtos["12745960"]
+
+    assert dto.year == 2024
+    assert dto.mileage == 109910  # 10 991 mil * 10
+    assert dto.fuel_type == "Hybrid"
+
+
+def test_row_card_diesel_listing_keeps_grid_fields() -> None:
+    """Card 12745948: diesel, mileage 15 490 mil -> 154 900 km, year 2015."""
+    dtos = _by_id(parse_listing_cards(_load("volvo_xc60_rows.html")))
+    dto = dtos["12745948"]
+
+    assert dto.year == 2015
+    assert dto.mileage == 154900  # 15 490 mil * 10
+    assert dto.fuel_type == "Diesel"
+
+
+def test_row_card_listing_without_drivmedel_row_yields_none_fuel_type() -> None:
+    """Card 12745866: no `Drivmedel:` row on the grid card -> fuel_type None,
+    but year/mileage are still populated from the grid card's `dl`."""
+    dtos = _by_id(parse_listing_cards(_load("volvo_xc60_rows.html")))
+    dto = dtos["12745866"]
+
+    assert dto.year == 2025
+    assert dto.mileage == 56250  # 5 625 mil * 10
+    assert dto.fuel_type is None
+
+
+# --- _derive_year Tillv.mån fallback (CAR-23) -----------------------------------
+
+
+def test_year_falls_back_to_tillv_man_when_ar_row_is_missing() -> None:
+    """No `Ar:` row, but a `Tillv.mån:` row with "2023-11" -> year 2023."""
+    html = """
+    <div class="Card" id="1">
+      <img data-src="https://bilweb.se/i?u=1" alt="Volvo XC60 T6 2023">
+      <h3 class="Card-heading">
+        <a class="go_to_detail" href="https://bilweb.se/x-1">Volvo XC60 T6</a>
+      </h3>
+      <a data-track-event="monthly_cost_list" data-dealer-name="D"
+         data-brand-name="Volvo" data-model-name="XC60">link</a>
+      <dl class="Card-carData">
+        <dt>Mil:</dt><dd>1 000</dd>
+        <dt>Tillv.mån:</dt><dd>2023-11</dd>
+      </dl>
+    </div>
+    """
+    dtos = parse_listing_cards(html)
+
+    assert len(dtos) == 1
+    assert dtos[0].year == 2023
+    assert dtos[0].mileage == 10000  # 1 000 mil * 10
+
+
+def test_year_falls_back_to_tillv_man_with_month_slash_year_format() -> None:
+    """`Tillv.mån:` formatted as "03/2023" (month/year) -> year 2023."""
+    html = """
+    <div class="Card" id="1">
+      <img data-src="https://bilweb.se/i?u=1" alt="Volvo XC60 T6 2023">
+      <h3 class="Card-heading">
+        <a class="go_to_detail" href="https://bilweb.se/x-1">Volvo XC60 T6</a>
+      </h3>
+      <a data-track-event="monthly_cost_list" data-dealer-name="D"
+         data-brand-name="Volvo" data-model-name="XC60">link</a>
+      <dl class="Card-carData">
+        <dt>Mil:</dt><dd>1 000</dd>
+        <dt>Tillv.mån:</dt><dd>03/2023</dd>
+      </dl>
+    </div>
+    """
+    dtos = parse_listing_cards(html)
+
+    assert dtos[0].year == 2023
+
+
+def test_ar_row_takes_precedence_over_tillv_man() -> None:
+    """Both `Ar:` and `Tillv.mån:` present -> `Ar:` wins."""
+    html = """
+    <div class="Card" id="1">
+      <img data-src="https://bilweb.se/i?u=1" alt="Volvo XC60 T6 2020">
+      <h3 class="Card-heading">
+        <a class="go_to_detail" href="https://bilweb.se/x-1">Volvo XC60 T6</a>
+      </h3>
+      <a data-track-event="monthly_cost_list" data-dealer-name="D"
+         data-brand-name="Volvo" data-model-name="XC60">link</a>
+      <dl class="Card-carData">
+        <dt>Mil:</dt><dd>1 000</dd>
+        <dt>Ar:</dt><dd>2020</dd>
+        <dt>Tillv.mån:</dt><dd>2019-12</dd>
+      </dl>
+    </div>
+    """
+    dtos = parse_listing_cards(html)
+
+    assert dtos[0].year == 2020
+
+
+def test_no_year_or_tillv_man_row_yields_none_year() -> None:
+    html = """
+    <div class="Card" id="1">
+      <img data-src="https://bilweb.se/i?u=1" alt="Volvo XC60 T6">
+      <h3 class="Card-heading">
+        <a class="go_to_detail" href="https://bilweb.se/x-1">Volvo XC60 T6</a>
+      </h3>
+      <a data-track-event="monthly_cost_list" data-dealer-name="D"
+         data-brand-name="Volvo" data-model-name="XC60">link</a>
+      <dl class="Card-carData">
+        <dt>Mil:</dt><dd>1 000</dd>
+      </dl>
+    </div>
+    """
+    dtos = parse_listing_cards(html)
+
+    assert dtos[0].year is None
 
 
 # --- skip paths ----------------------------------------------------------------

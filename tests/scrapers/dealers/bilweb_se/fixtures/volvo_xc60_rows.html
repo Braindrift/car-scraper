@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!--
+Trimmed real capture of https://bilweb.se/sok/volvo/xc60 (CAR-23).
+
+CAR-23 root cause: bilweb.se's search-result page renders every listing
+*twice* - once as a grid card (`div.Card`, with `dl.Card-carData` containing
+`Mil:`/`Ar:`/`Drivmedel:` rows) for the grid view, and again as a "row" card
+(`div.Card Card-row`, with a plain `div.Card-carData Card-carData--row`
+containing only a comma-separated "<year>, <mileage> mil, <location>" string -
+no `dl`, no fuel/transmission data) for the list view. Both share the same
+`id`/external_id.
+
+`parse_listing_cards`'s old `div.Card` selector matched *both* variants,
+producing two DTOs per listing with the same `external_id`. The row variant's
+`_derive_year`/`_derive_mileage`/`_derive_fuel_type` all returned `None`
+(no `dl.Card-carData` to find), and `BilwebSeScraper.scrape()`'s
+`{dto.external_id: dto for dto in dtos}` dedup keeps the *last* DTO for a
+given id - the row variant (which appears after the grid variant in the DOM)
+always won, overwriting the grid variant's correctly-populated year/mileage/
+fuel_type with `None`. This is why every real Bilweb listing had these fields
+null despite the grid-card markup being correct (and despite fixture tests
+against grid-only fixtures passing).
+
+Kept cards (by id), each present as both a grid card and a row card:
+- 12745960: hybrid (Icon--electric + Icon--gasoline -> "Hybrid"), mileage
+  10 991 mil -> 109 910 km, year 2024.
+- 12745948: diesel (Icon--diesel), mileage 15 490 mil -> 154 900 km, year 2015.
+- 12745866: no `Drivmedel:` row at all (fuel_type -> None), mileage 5 625 mil
+  -> 56 250 km, year 2025.
+
+Surrounding page structure trimmed to the minimum BeautifulSoup needs: a
+`#vehicle_card` container with `Card-Wrapper` > `div.Card` (grid) and
+`div.Card.Card-row` (row) per listing, as bilweb.se actually emits them.
+-->
+<html lang="sv">
+  <head>
+    <meta charset="utf8" />
+    <title>Volvo XC60 till salu - Bilweb.se</title>
+  </head>
+  <body>
+    <div class="tabs-panel is-active">
+      <div class="Grid Grid--gutterHmd Grid--gutterVlg Grid--equalHeight" id="vehicle_card">
+        <div class="Card-Wrapper Grid-cell u-sm-size1of2 u-lg-size1of3 u-size1of1">
+          <div class="Card" id="12745960">
+            <div class="Card-ImageFrame">
+              <div class="Card-image CardImage--boarder">
+                <img data-src="https://bilweb.se/i?u=107417260&amp;w=400&amp;h=250&amp;c=1" alt="Volvo XC60 Recharge T6 Core Bright 2024" class="goToObject lazyload">
+              </div>
+            </div>
+            <div class="Card-content u-paddingBxsm u-posRelative">
+              <h3 class="Card-heading"><a class="go_to_detail" href="https://bilweb.se/ostergotlands-lan/volvo-xc60-recharge-t6-core-bright-2024-suv-12745960">Volvo XC60 Recharge T6 Core Bright</a></h3>
+              <div class="Card-price">
+                Pris <p class="Card-mainPrice">414 900 kr</p>
+                <span class="Card-monthPrice monthly-cost-link">
+                  <a href="/billan/jamfor?objCost=414900&amp;objImg=https://bilweb.se/i?u=107417260&amp;w=621&amp;h=413&amp;c=1" data-track-event="monthly_cost_link" data-dealer-name="Tage Rejmes Bil AB - Norrkoping" data-brand-name="Volvo" data-model-name="XC60" target="_blank" rel="nofollow">Berakna manadskostnad</a>
+                </span>
+              </div>
+              <span class="Card-firm">Tage Rejmes Bil AB - Norrkoping</span>
+              <dl class="Card-carData">
+                <dt>Mil:</dt>
+                <dd>10 991</dd>
+                <dt>År:</dt>
+                <dd>2024</dd>
+                <dt>Drivmedel:</dt>
+                <dd><span class="Icon Icon--electric"></span>/<span class="Icon Icon--gasoline"></span></dd>
+              </dl>
+            </div>
+            <div class="Button--horisont">
+              <button class="Button Button--square Button--Split compare-button" data-objectid="12745960">Jamfor<i class="Icon Icon--checkmark u-marginLxsm"></i></button>
+              <a class="Button Button--squareGreen Button--Split goToObject">Se bil</a>
+            </div>
+          </div>
+        </div>
+        <div class="Card-Wrapper Grid-cell u-sm-size1of2 u-lg-size1of3 u-size1of1">
+          <div class="Card" id="12745948">
+            <div class="Card-ImageFrame">
+              <div class="Card-image CardImage--boarder">
+                <img data-src="https://bilweb.se/i?u=107416878&amp;w=400&amp;h=250&amp;c=1" alt="Volvo XC60 D4 Momentum Business Edition Dragkrok 2015" class="goToObject lazyload">
+              </div>
+            </div>
+            <div class="Card-content u-paddingBxsm u-posRelative">
+              <h3 class="Card-heading"><a class="go_to_detail" href="https://bilweb.se/blekinge-lan/volvo-xc60-d4-momentum-business-edition-dragkrok-2015-suv-12745948">Volvo XC60 D4 Momentum Business Edition Dragk..</a></h3>
+              <div class="Card-price">
+                Pris <p class="Card-mainPrice">184 800 kr</p>
+                <span class="Card-monthPrice monthly-cost-link">
+                  <a href="/billan/jamfor?objCost=184800&amp;objImg=https://bilweb.se/i?u=107416878&amp;w=621&amp;h=413&amp;c=1" data-track-event="monthly_cost_link" data-dealer-name="Holmgrens Bil AB Karlskrona" data-brand-name="Volvo" data-model-name="XC60" target="_blank" rel="nofollow">Berakna manadskostnad</a>
+                </span>
+              </div>
+              <span class="Card-firm">Holmgrens Bil AB Karlskrona</span>
+              <dl class="Card-carData">
+                <dt>Mil:</dt>
+                <dd>15 490</dd>
+                <dt>År:</dt>
+                <dd>2015</dd>
+                <dt>Drivmedel:</dt>
+                <dd><span class="Icon Icon--diesel"></span></dd>
+              </dl>
+            </div>
+            <div class="Button--horisont">
+              <button class="Button Button--square Button--Split compare-button" data-objectid="12745948">Jamfor<i class="Icon Icon--checkmark u-marginLxsm"></i></button>
+              <a class="Button Button--squareGreen Button--Split goToObject">Se bil</a>
+            </div>
+          </div>
+        </div>
+        <div class="Card-Wrapper Grid-cell u-sm-size1of2 u-lg-size1of3 u-size1of1">
+          <div class="Card" id="12745866">
+            <div class="Card-ImageFrame">
+              <div class="Card-image CardImage--boarder">
+                <img data-src="https://bilweb.se/i?u=107415408&amp;w=400&amp;h=250&amp;c=1" alt="Volvo XC60 Recharge T6 AWD Core Panorama Drag Adap-far Backkamera 2025" class="goToObject lazyload">
+              </div>
+            </div>
+            <div class="Card-content u-paddingBxsm u-posRelative">
+              <h3 class="Card-heading"><a class="go_to_detail" href="https://bilweb.se/kronobergs-lan/volvo-xc60-recharge-t6-awd-core-panorama-drag-adap-far-backkamera-2025-suv-12745866">Volvo XC60 Recharge T6 AWD Core Panorama Drag..</a></h3>
+              <div class="Card-price">
+                Pris <p class="Card-mainPrice">474 900 kr</p>
+                <span class="Card-monthPrice monthly-cost-link">
+                  <a href="/billan/jamfor?objCost=474900&amp;objImg=https://bilweb.se/i?u=107415408&amp;w=621&amp;h=413&amp;c=1" data-track-event="monthly_cost_link" data-dealer-name="Motorsport AB" data-brand-name="Volvo" data-model-name="XC60" target="_blank" rel="nofollow">Berakna manadskostnad</a>
+                </span>
+              </div>
+              <span class="Card-firm">Motorsport AB</span>
+              <dl class="Card-carData">
+                <dt>Mil:</dt>
+                <dd>5 625</dd>
+                <dt>År:</dt>
+                <dd>2025</dd>
+              </dl>
+            </div>
+            <div class="Button--horisont">
+              <button class="Button Button--square Button--Split compare-button" data-objectid="12745866">Jamfor<i class="Icon Icon--checkmark u-marginLxsm"></i></button>
+              <a class="Button Button--squareGreen Button--Split goToObject">Se bil</a>
+            </div>
+          </div>
+        </div>
+        <div class="Card-Wrapper Grid-cell u-size1of1">
+          <div class="Card Card-row" id="12745960">
+            <div class="Grid">
+              <div class="Grid-cell u-md-size5of10 u-size7of12 Card-content-wrapper">
+                <div class="Card-content Card-content--row">
+                  <h3 class="Card-heading u-hidden u-md-block Card-heading-row u-paddingLz"><a class="go_to_detail" href="https://bilweb.se/ostergotlands-lan/volvo-xc60-recharge-t6-core-bright-2024-suv-12745960">Volvo XC60 Recharge T6 Core Bright</a></h3>
+                  <span class="Card-firm u-hidden u-md-block">Tage Rejmes Bil AB - Norrkoping</span>
+                  <div class="Card-carData Card-carData--row">2024, 10 991 mil, Norrkoping</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="Card-Wrapper Grid-cell u-size1of1">
+          <div class="Card Card-row" id="12745948">
+            <div class="Grid">
+              <div class="Grid-cell u-md-size5of10 u-size7of12 Card-content-wrapper">
+                <div class="Card-content Card-content--row">
+                  <h3 class="Card-heading u-hidden u-md-block Card-heading-row u-paddingLz"><a class="go_to_detail" href="https://bilweb.se/blekinge-lan/volvo-xc60-d4-momentum-business-edition-dragkrok-2015-suv-12745948">Volvo XC60 D4 Momentum Business Edition Dragkrok</a></h3>
+                  <span class="Card-firm u-hidden u-md-block">Holmgrens Bil AB Karlskrona</span>
+                  <div class="Card-carData Card-carData--row">2015, 15 490 mil, Karlskrona</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="Card-Wrapper Grid-cell u-size1of1">
+          <div class="Card Card-row" id="12745866">
+            <div class="Grid">
+              <div class="Grid-cell u-md-size5of10 u-size7of12 Card-content-wrapper">
+                <div class="Card-content Card-content--row">
+                  <h3 class="Card-heading u-hidden u-md-block Card-heading-row u-paddingLz"><a class="go_to_detail" href="https://bilweb.se/kronobergs-lan/volvo-xc60-recharge-t6-awd-core-panorama-drag-adap-far-backkamera-2025-suv-12745866">Volvo XC60 Recharge T6 AWD Core Panorama Drag Adap-far Backkamera</a></h3>
+                  <span class="Card-firm u-hidden u-md-block">Motorsport AB</span>
+                  <div class="Card-carData Card-carData--row">2025, 5 625 mil, Vaxjo</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
