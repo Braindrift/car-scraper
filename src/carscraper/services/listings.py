@@ -67,6 +67,11 @@ class ListingFilters:
     # Mileage range bounds, for drilling down from a mileage bucket (CAR-22).
     min_mileage: int | None = None
     max_mileage: int | None = None
+    # When set, restrict to listings with a null `year`/`mileage` — drilling
+    # down from the "Unknown" year/mileage bucket (CAR-22). Takes precedence
+    # over `year`/`min_mileage`/`max_mileage` when set.
+    year_unknown: bool = False
+    mileage_unknown: bool = False
 
 
 def list_car_listings(session: Session, filters: ListingFilters | None = None) -> list[CarListing]:
@@ -94,12 +99,17 @@ def list_car_listings(session: Session, filters: ListingFilters | None = None) -
         stmt = stmt.where(CarListing.price >= filters.min_price)
     if filters.max_price is not None:
         stmt = stmt.where(CarListing.price <= filters.max_price)
-    if filters.year is not None:
+    if filters.year_unknown:
+        stmt = stmt.where(CarListing.year.is_(None))
+    elif filters.year is not None:
         stmt = stmt.where(CarListing.year == filters.year)
-    if filters.min_mileage is not None:
-        stmt = stmt.where(CarListing.mileage >= filters.min_mileage)
-    if filters.max_mileage is not None:
-        stmt = stmt.where(CarListing.mileage <= filters.max_mileage)
+    if filters.mileage_unknown:
+        stmt = stmt.where(CarListing.mileage.is_(None))
+    else:
+        if filters.min_mileage is not None:
+            stmt = stmt.where(CarListing.mileage >= filters.min_mileage)
+        if filters.max_mileage is not None:
+            stmt = stmt.where(CarListing.mileage <= filters.max_mileage)
     if filters.active_only:
         stmt = stmt.where(CarListing.active.is_(True))
     if filters.discarded is not None:

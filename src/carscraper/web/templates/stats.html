@@ -116,7 +116,13 @@
         No data to chart yet.
       </div>
     {% endif %}
+
+    {% if year_labels or mileage_labels %}
+      <p class="mt-2 text-xs text-gray-400">Click a bar to see the matching listings.</p>
+    {% endif %}
   </div>
+
+  <div id="stats-drilldown"></div>
 
   <script>
     (function () {
@@ -151,6 +157,26 @@
         grid: { drawOnChartArea: false },
       };
 
+      // Shared make/model/include_inactive scope, mirrored onto every
+      // drill-down request so the inline table matches the chart's scope.
+      const scopeParams = new URLSearchParams();
+      {% if make %}scopeParams.set("make", {{ make | tojson }});{% endif %}
+      {% if model %}scopeParams.set("model", {{ model | tojson }});{% endif %}
+      {% if include_inactive %}scopeParams.set("include_inactive", "true");{% endif %}
+
+      function loadDrilldown(extraParams) {
+        const params = new URLSearchParams(scopeParams);
+        for (const [key, value] of Object.entries(extraParams)) {
+          if (value !== null && value !== undefined) {
+            params.set(key, String(value));
+          }
+        }
+        htmx.ajax("GET", "/stats/listings?" + params.toString(), {
+          target: "#stats-drilldown",
+          swap: "innerHTML",
+        });
+      }
+
       {% if year_labels %}
         new Chart(document.getElementById("year-chart"), {
           type: "bar",
@@ -176,11 +202,22 @@
               y: countAxis,
               y1: priceAxis,
             },
+            onClick: (event, elements, chart) => {
+              if (!elements.length) return;
+              const label = chart.data.labels[elements[0].index];
+              if (label === "Unknown") {
+                loadDrilldown({ year_unknown: "true" });
+              } else {
+                loadDrilldown({ year: label });
+              }
+            },
           },
         });
       {% endif %}
 
       {% if mileage_labels %}
+        const mileageBucketParams = {{ mileage_bucket_params | tojson }};
+
         new Chart(document.getElementById("mileage-chart"), {
           type: "bar",
           data: {
@@ -204,6 +241,20 @@
             scales: {
               y: countAxis,
               y1: priceAxis,
+            },
+            onClick: (event, elements, chart) => {
+              if (!elements.length) return;
+              const label = chart.data.labels[elements[0].index];
+              const bucket = mileageBucketParams[label];
+              if (!bucket) return;
+              if (bucket.mileage_unknown) {
+                loadDrilldown({ mileage_unknown: "true" });
+              } else {
+                loadDrilldown({
+                  min_mileage: bucket.min_mileage,
+                  max_mileage: bucket.max_mileage,
+                });
+              }
             },
           },
         });

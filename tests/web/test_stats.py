@@ -228,6 +228,131 @@ def test_stats_page_distribution_charts_empty_state(db_session: Session) -> None
     assert response.text.count("No data to chart yet.") == 2
 
 
+def test_stats_listings_filters_by_year(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", year=2018, price=150_000)
+    _seed_listing(db_session, external_id="2", year=2020, price=200_000)
+
+    response = client.get("/stats/listings", params={"year": "2018"})
+
+    assert response.status_code == 200
+    assert "2018" in response.text
+    assert "2020" not in response.text
+    assert "Year: 2018" in response.text
+
+
+def test_stats_listings_filters_by_year_unknown(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", year=2018, price=150_000)
+    _seed_listing(db_session, external_id="2", year=None, price=80_000)
+
+    response = client.get("/stats/listings", params={"year_unknown": "true"})
+
+    assert response.status_code == 200
+    assert "80 000 kr" in response.text
+    assert "150 000 kr" not in response.text
+    assert "Year: Unknown" in response.text
+
+
+def test_stats_listings_filters_by_mileage_range(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", mileage=1_000, price=151_000)
+    _seed_listing(db_session, external_id="2", mileage=35_000, price=52_000)
+
+    response = client.get("/stats/listings", params={"min_mileage": "0", "max_mileage": "2000"})
+
+    assert response.status_code == 200
+    assert "151 000 kr" in response.text
+    assert "52 000 kr" not in response.text
+    assert "Mileage: 0-2000 km" in response.text
+
+
+def test_stats_listings_filters_by_mileage_open_ended_bucket(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", mileage=1_000, price=151_000)
+    _seed_listing(db_session, external_id="2", mileage=35_000, price=52_000)
+
+    response = client.get("/stats/listings", params={"min_mileage": "30001"})
+
+    assert response.status_code == 200
+    assert "52 000 kr" in response.text
+    assert "151 000 kr" not in response.text
+    assert "Mileage: 30001+ km" in response.text
+
+
+def test_stats_listings_filters_by_mileage_unknown(db_session: Session) -> None:
+    _seed_listing(db_session, external_id="1", mileage=1_000, price=151_000)
+    _seed_listing(db_session, external_id="2", mileage=None, price=82_000)
+
+    response = client.get("/stats/listings", params={"mileage_unknown": "true"})
+
+    assert response.status_code == 200
+    assert "82 000 kr" in response.text
+    assert "151 000 kr" not in response.text
+    assert "Mileage: Unknown" in response.text
+
+
+def test_stats_listings_respects_scope_and_include_inactive(db_session: Session) -> None:
+    _seed_listing(
+        db_session,
+        external_id="1",
+        make="Volvo",
+        model="V70",
+        year=2018,
+        price=150_000,
+        active=True,
+    )
+    _seed_listing(
+        db_session,
+        external_id="2",
+        make="Kia",
+        model="Sportage",
+        year=2018,
+        price=220_000,
+        active=True,
+    )
+    _seed_listing(
+        db_session,
+        external_id="3",
+        make="Volvo",
+        model="V70",
+        year=2018,
+        price=999_000,
+        active=False,
+    )
+
+    scoped = client.get("/stats/listings", params={"make": "Volvo", "model": "V70", "year": "2018"})
+    assert scoped.status_code == 200
+    assert "150 000 kr" in scoped.text
+    assert "220 000 kr" not in scoped.text
+    assert "999 000 kr" not in scoped.text
+
+    with_inactive = client.get(
+        "/stats/listings",
+        params={"make": "Volvo", "model": "V70", "year": "2018", "include_inactive": "true"},
+    )
+    assert with_inactive.status_code == 200
+    assert "999 000 kr" in with_inactive.text
+
+
+def test_stats_listings_empty_state(db_session: Session) -> None:
+    _seed_listing(db_session, year=2018, price=150_000)
+
+    response = client.get("/stats/listings", params={"year": "1999"})
+
+    assert response.status_code == 200
+    assert "No listings yet" in response.text
+
+
+def test_stats_page_charts_have_drilldown_container_and_click_handlers(
+    db_session: Session,
+) -> None:
+    _seed_listing(db_session, year=2018, mileage=5_000, price=150_000)
+
+    response = client.get("/stats")
+
+    assert response.status_code == 200
+    assert 'id="stats-drilldown"' in response.text
+    assert "onClick" in response.text
+    assert "/stats/listings" in response.text
+
+
 def test_listing_detail_not_found(db_session: Session) -> None:
     response = client.get("/listings/999")
 

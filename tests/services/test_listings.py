@@ -178,6 +178,36 @@ def test_combined_filters(session: Session, seeded: dict[str, object]) -> None:
     assert [listing.id for listing in results] == [seeded["volvo_active"].id]
 
 
+def test_filter_by_year_unknown(session: Session, seeded: dict[str, object]) -> None:
+    results = list_car_listings(session, ListingFilters(year_unknown=True))
+
+    assert [listing.id for listing in results] == [seeded["kia"].id]
+
+
+def test_year_unknown_takes_precedence_over_year(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    results = list_car_listings(session, ListingFilters(year=2015, year_unknown=True))
+
+    assert [listing.id for listing in results] == [seeded["kia"].id]
+
+
+def test_filter_by_mileage_unknown(session: Session, seeded: dict[str, object]) -> None:
+    results = list_car_listings(session, ListingFilters(mileage_unknown=True))
+
+    assert [listing.id for listing in results] == [seeded["kia"].id]
+
+
+def test_mileage_unknown_takes_precedence_over_mileage_range(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    results = list_car_listings(
+        session, ListingFilters(min_mileage=0, max_mileage=100_000, mileage_unknown=True)
+    )
+
+    assert [listing.id for listing in results] == [seeded["kia"].id]
+
+
 def test_combined_filters_no_match(session: Session, seeded: dict[str, object]) -> None:
     results = list_car_listings(
         session,

@@ -28,6 +28,8 @@ from carscraper.services.scrape_status import (
     list_dealer_scrape_status,
 )
 from carscraper.services.stats import (
+    MILEAGE_BUCKET_UNKNOWN,
+    MILEAGE_BUCKETS,
     mileage_bucket_stats,
     model_overview_stats,
     price_history,
@@ -311,6 +313,20 @@ def stats_page(
     mileage_counts = [row.listing_count for row in mileage_stats]
     mileage_price_ranges = [[row.min_price, row.max_price] for row in mileage_stats]
 
+    # Map each mileage bucket label to the `min_mileage`/`max_mileage`/
+    # `mileage_unknown` drill-down params for CAR-22's chart onClick handler
+    # (kept here so `MILEAGE_BUCKETS`/`MILEAGE_BUCKET_UNKNOWN` stay the single
+    # source of truth for bucket boundaries).
+    mileage_bucket_params: dict[str, dict[str, int | bool | None]] = {
+        label: {"min_mileage": lower, "max_mileage": upper, "mileage_unknown": False}
+        for label, lower, upper in MILEAGE_BUCKETS
+    }
+    mileage_bucket_params[MILEAGE_BUCKET_UNKNOWN] = {
+        "min_mileage": None,
+        "max_mileage": None,
+        "mileage_unknown": True,
+    }
+
     return templates.TemplateResponse(
         request,
         "stats.html",
@@ -325,6 +341,76 @@ def stats_page(
             "mileage_labels": mileage_labels,
             "mileage_counts": mileage_counts,
             "mileage_price_ranges": mileage_price_ranges,
+            "mileage_bucket_params": mileage_bucket_params,
+        },
+    )
+
+
+@router.get("/stats/listings", response_class=HTMLResponse)
+def stats_listings(
+    request: Request,
+    make: str | None = None,
+    model: str | None = None,
+    include_inactive: str | None = None,
+    year: str | None = None,
+    year_unknown: str | None = None,
+    min_mileage: str | None = None,
+    max_mileage: str | None = None,
+    mileage_unknown: str | None = None,
+) -> HTMLResponse:
+    """Render a listings-table fragment for a clicked chart category (CAR-22).
+
+    Drill-down target for the `/stats` distribution charts: clicking a year
+    or mileage-bucket bar/category triggers an HTMX GET here with the same
+    `make`/`model`/`include_inactive` scope as the chart plus either `year`
+    (or `year_unknown=true` for the "Unknown" year bucket) or
+    `min_mileage`/`max_mileage` (or `mileage_unknown=true` for the "Unknown"
+    mileage bucket). Returns the same listings-table partial used elsewhere,
+    plus a label describing the selected category for the results header.
+    """
+    make = make or None
+    model = model or None
+    show_inactive = bool(include_inactive)
+    show_year_unknown = bool(year_unknown)
+    show_mileage_unknown = bool(mileage_unknown)
+
+    filters = ListingFilters(
+        make=make,
+        model=model,
+        active_only=not show_inactive,
+        year=int(year) if year else None,
+        year_unknown=show_year_unknown,
+        min_mileage=int(min_mileage) if min_mileage else None,
+        max_mileage=int(max_mileage) if max_mileage else None,
+        mileage_unknown=show_mileage_unknown,
+    )
+
+    if show_year_unknown:
+        category_label = "Year: Unknown"
+    elif year:
+        category_label = f"Year: {year}"
+    elif show_mileage_unknown:
+        category_label = "Mileage: Unknown"
+    elif min_mileage or max_mileage:
+        if max_mileage is None:
+            category_label = f"Mileage: {min_mileage}+ km"
+        else:
+            category_label = f"Mileage: {min_mileage}-{max_mileage} km"
+    else:
+        category_label = ""
+
+    with get_session() as session:
+        listings = list_car_listings(session, filters)
+        statuses = listing_statuses(session, listings)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/stats_listings.html",
+        {
+            "listings": listings,
+            "statuses": statuses,
+            "view": "active",
+            "category_label": category_label,
         },
     )
 
