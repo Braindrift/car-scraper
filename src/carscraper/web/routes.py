@@ -45,6 +45,17 @@ from carscraper.web.templating import templates
 router = APIRouter(tags=["web"])
 
 
+def _count_label(listing_count: int, excluded_count: int) -> str:
+    """Format a distribution-chart bar's in-bar count label.
+
+    `"N"` normally, or `"N (M excluded)"` when `excluded_count` listings in
+    the bucket had no usable price (CAR-24's "low bid" exclusion).
+    """
+    if excluded_count:
+        return f"{listing_count} ({excluded_count} excluded)"
+    return str(listing_count)
+
+
 def _parse_filters(
     make: str | None,
     model: str | None,
@@ -307,14 +318,25 @@ def stats_page(
 
     year_labels = [str(row.year) if row.year is not None else "Unknown" for row in year_stats]
     year_counts = [row.listing_count for row in year_stats]
+    year_count_labels = [_count_label(row.listing_count, row.excluded_count) for row in year_stats]
     # `min_price`/`max_price` are `None` when a bucket has no "usable" price
-    # (CAR-24); fall back to `[0, 0]` so the chart renders an empty range
-    # rather than `null` (full chart redesign is CAR-25).
-    year_price_ranges = [[row.min_price or 0, row.max_price or 0] for row in year_stats]
+    # (CAR-24); pass `null` through so the chart can skip the error bar /
+    # median point for that bucket (CAR-25).
+    year_price_ranges = [
+        [row.min_price, row.max_price] if row.min_price is not None else None for row in year_stats
+    ]
+    year_medians = [row.median_price for row in year_stats]
 
     mileage_labels = [row.bucket for row in mileage_stats]
     mileage_counts = [row.listing_count for row in mileage_stats]
-    mileage_price_ranges = [[row.min_price or 0, row.max_price or 0] for row in mileage_stats]
+    mileage_count_labels = [
+        _count_label(row.listing_count, row.excluded_count) for row in mileage_stats
+    ]
+    mileage_price_ranges = [
+        [row.min_price, row.max_price] if row.min_price is not None else None
+        for row in mileage_stats
+    ]
+    mileage_medians = [row.median_price for row in mileage_stats]
 
     # Map each mileage bucket label to the `min_mileage`/`max_mileage`/
     # `mileage_unknown` drill-down params for CAR-22's chart onClick handler
@@ -340,10 +362,14 @@ def stats_page(
             "include_inactive": show_inactive,
             "year_labels": year_labels,
             "year_counts": year_counts,
+            "year_count_labels": year_count_labels,
             "year_price_ranges": year_price_ranges,
+            "year_medians": year_medians,
             "mileage_labels": mileage_labels,
             "mileage_counts": mileage_counts,
+            "mileage_count_labels": mileage_count_labels,
             "mileage_price_ranges": mileage_price_ranges,
+            "mileage_medians": mileage_medians,
             "mileage_bucket_params": mileage_bucket_params,
         },
     )

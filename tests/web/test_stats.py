@@ -195,8 +195,12 @@ def test_stats_page_year_bucket_chart_data(db_session: Session) -> None:
     assert '"2018", "2020", "Unknown"' in response.text
     # Counts: one listing per bucket.
     assert "[1, 1, 1]" in response.text
-    # Price ranges: each bucket has a single listing, so min == max.
+    # In-bar count labels: no exclusions, so plain counts.
+    assert '["1", "1", "1"]' in response.text
+    # Price ranges (error bars): each bucket has a single listing, so min == max.
     assert "[[150000, 150000], [200000, 200000], [120000, 120000]]" in response.text
+    # Median price line: one value per bucket, equal to that bucket's single price.
+    assert "[150000, 200000, 120000]" in response.text
 
 
 def test_stats_page_mileage_bucket_chart_data(db_session: Session) -> None:
@@ -211,7 +215,36 @@ def test_stats_page_mileage_bucket_chart_data(db_session: Session) -> None:
     assert response.status_code == 200
     # Fixed bucket order: only buckets with data are returned, "30000+" before "Unknown".
     assert '"0-2000", "30000+", "Unknown"' in response.text
+    assert '["1", "1", "1"]' in response.text
     assert "[[150000, 150000], [100000, 100000], [120000, 120000]]" in response.text
+    assert "[150000, 100000, 120000]" in response.text
+
+
+def test_stats_page_year_bucket_chart_data_with_excluded_and_unpriced(
+    db_session: Session,
+) -> None:
+    # Scope's preliminary median is computed over [150000, 200000, 50000] -> 150000.
+    # LOW_BID_THRESHOLD (0.66) * 150000 = 99000, so 50000 is excluded as a "low bid".
+    _seed_listing(db_session, external_id="1", year=2018, price=150_000)
+    _seed_listing(db_session, external_id="2", year=2018, price=200_000)
+    _seed_listing(db_session, external_id="3", year=2018, price=50_000)
+    # Unpriced listing in its own bucket: no usable price at all.
+    _seed_listing(db_session, external_id="4", year=2021, price=None)
+
+    response = client.get("/stats")
+
+    assert response.status_code == 200
+    assert '"2018", "2021"' in response.text
+    # 2018 bucket: 3 listings, 1 excluded as "low bid".
+    assert '"3 (1 excluded)"' in response.text
+    # 2021 bucket: 1 listing, fully excluded (no usable price at all).
+    assert '"1 (1 excluded)"' in response.text
+    # 2018's usable prices are [150000, 200000] -> min/max range and median 175000.
+    assert "[150000, 200000]" in response.text
+    assert "175000.0" in response.text
+    # 2021 has no usable price: null range and null median for that bucket.
+    assert "[[150000, 200000], null]" in response.text
+    assert "[175000.0, null]" in response.text
 
 
 def test_stats_page_distribution_charts_scoped_by_make_and_model(db_session: Session) -> None:

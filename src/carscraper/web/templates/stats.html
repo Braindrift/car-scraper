@@ -166,7 +166,7 @@
         type: "linear",
         position: "left",
         beginAtZero: true,
-        title: { display: true, text: "Listings" },
+        title: { display: true, text: "Number of cars" },
         ticks: { precision: 0 },
       };
       const priceAxis = {
@@ -175,6 +175,120 @@
         beginAtZero: true,
         title: { display: true, text: "Price (kr)" },
         grid: { drawOnChartArea: false },
+      };
+
+      // Draws each bucket's "N" / "N (M excluded)" count label centered
+      // inside (or just above, if it doesn't fit) its count bar.
+      const countLabelPlugin = {
+        id: "countLabels",
+        afterDatasetsDraw(chart) {
+          const labels = chart.options.plugins.countLabels?.labels;
+          if (!labels) return;
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || meta.hidden) return;
+
+          const { ctx } = chart;
+          ctx.save();
+          ctx.font = "12px sans-serif";
+          ctx.fillStyle = "#374151";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          meta.data.forEach((bar, index) => {
+            const text = labels[index];
+            if (!text) return;
+            const barTop = bar.y;
+            const barBottom = bar.base;
+            const inside = barBottom - barTop > 16;
+            const y = inside ? barTop + 12 : barTop - 8;
+            ctx.fillStyle = inside ? "#ffffff" : "#374151";
+            ctx.fillText(text, bar.x, y);
+          });
+
+          ctx.restore();
+        },
+      };
+
+      // Chart.js has no built-in error-bar chart type. This plugin draws a
+      // simple vertical "I-beam" (cap, stem, cap) from `min_price` to
+      // `max_price` for each bucket on the `y1` (price) axis, centered on
+      // that bucket's bar. Buckets with no usable price (`null` range) are
+      // skipped, leaving just the count bar for that bucket.
+      const errorBarPlugin = {
+        id: "errorBars",
+        afterDatasetsDraw(chart) {
+          const ranges = chart.options.plugins.errorBars?.ranges;
+          if (!ranges) return;
+          const meta = chart.getDatasetMeta(0);
+          const scale = chart.scales.y1;
+          if (!meta || !scale) return;
+
+          const { ctx } = chart;
+          ctx.save();
+          ctx.strokeStyle = "rgba(220, 38, 38, 0.8)";
+          ctx.lineWidth = 1.5;
+          const capWidth = 8;
+
+          meta.data.forEach((bar, index) => {
+            const range = ranges[index];
+            if (!range) return;
+            const [min, max] = range;
+            const x = bar.x;
+            const yMin = scale.getPixelForValue(min);
+            const yMax = scale.getPixelForValue(max);
+
+            ctx.beginPath();
+            // Stem.
+            ctx.moveTo(x, yMin);
+            ctx.lineTo(x, yMax);
+            // Top cap (max price).
+            ctx.moveTo(x - capWidth / 2, yMax);
+            ctx.lineTo(x + capWidth / 2, yMax);
+            // Bottom cap (min price).
+            ctx.moveTo(x - capWidth / 2, yMin);
+            ctx.lineTo(x + capWidth / 2, yMin);
+            ctx.stroke();
+          });
+
+          ctx.restore();
+        },
+      };
+
+      // The error bars aren't a Chart.js dataset, so add "Highest price" /
+      // "Lowest price" as extra (non-interactive) legend entries alongside
+      // the "Number of cars" bar and "Median price" line, matching the
+      // reference layout's legend.
+      const legendWithErrorBarEntries = {
+        labels: {
+          generateLabels(chart) {
+            const items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+            const errorBarColor = "rgba(220, 38, 38, 0.8)";
+            items.push(
+              {
+                text: "Highest price",
+                fillStyle: "transparent",
+                strokeStyle: errorBarColor,
+                lineWidth: 1.5,
+                hidden: false,
+                datasetIndex: -1,
+              },
+              {
+                text: "Lowest price",
+                fillStyle: "transparent",
+                strokeStyle: errorBarColor,
+                lineWidth: 1.5,
+                hidden: false,
+                datasetIndex: -1,
+              }
+            );
+            return items;
+          },
+        },
+        onClick(event, legendItem, legend) {
+          // Ignore clicks on the non-toggleable "Highest/Lowest price" entries.
+          if (legendItem.datasetIndex === -1) return;
+          Chart.defaults.plugins.legend.onClick.call(this, event, legendItem, legend);
+        },
       };
 
       // Shared make/model/include_inactive scope, mirrored onto every
@@ -204,16 +318,22 @@
             labels: {{ year_labels | tojson }},
             datasets: [
               {
-                label: "Listings",
+                label: "Number of cars",
                 data: {{ year_counts | tojson }},
                 backgroundColor: "rgba(37, 99, 235, 0.5)",
                 yAxisID: "y",
+                order: 2,
               },
               {
-                label: "Price range",
-                data: {{ year_price_ranges | tojson }},
-                backgroundColor: "rgba(16, 185, 129, 0.4)",
+                label: "Median price",
+                data: {{ year_medians | tojson }},
+                type: "line",
                 yAxisID: "y1",
+                borderColor: "rgba(220, 38, 38, 0.8)",
+                backgroundColor: "rgba(220, 38, 38, 0.8)",
+                spanGaps: false,
+                tension: 0.2,
+                order: 1,
               },
             ],
           },
@@ -221,6 +341,11 @@
             scales: {
               y: countAxis,
               y1: priceAxis,
+            },
+            plugins: {
+              legend: legendWithErrorBarEntries,
+              countLabels: { labels: {{ year_count_labels | tojson }} },
+              errorBars: { ranges: {{ year_price_ranges | tojson }} },
             },
             onClick: (event, elements, chart) => {
               if (!elements.length) return;
@@ -232,6 +357,7 @@
               }
             },
           },
+          plugins: [countLabelPlugin, errorBarPlugin],
         });
       {% endif %}
 
@@ -244,16 +370,22 @@
             labels: {{ mileage_labels | tojson }},
             datasets: [
               {
-                label: "Listings",
+                label: "Number of cars",
                 data: {{ mileage_counts | tojson }},
                 backgroundColor: "rgba(37, 99, 235, 0.5)",
                 yAxisID: "y",
+                order: 2,
               },
               {
-                label: "Price range",
-                data: {{ mileage_price_ranges | tojson }},
-                backgroundColor: "rgba(16, 185, 129, 0.4)",
+                label: "Median price",
+                data: {{ mileage_medians | tojson }},
+                type: "line",
                 yAxisID: "y1",
+                borderColor: "rgba(220, 38, 38, 0.8)",
+                backgroundColor: "rgba(220, 38, 38, 0.8)",
+                spanGaps: false,
+                tension: 0.2,
+                order: 1,
               },
             ],
           },
@@ -261,6 +393,11 @@
             scales: {
               y: countAxis,
               y1: priceAxis,
+            },
+            plugins: {
+              legend: legendWithErrorBarEntries,
+              countLabels: { labels: {{ mileage_count_labels | tojson }} },
+              errorBars: { ranges: {{ mileage_price_ranges | tojson }} },
             },
             onClick: (event, elements, chart) => {
               if (!elements.length) return;
@@ -277,6 +414,7 @@
               }
             },
           },
+          plugins: [countLabelPlugin, errorBarPlugin],
         });
       {% endif %}
     })();
