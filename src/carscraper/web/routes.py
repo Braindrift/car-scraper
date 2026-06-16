@@ -37,7 +37,7 @@ from carscraper.services.stats import (
 )
 from carscraper.services.tracked_models import (
     create_tracked_model,
-    delete_tracked_model,
+    delete_tracked_model_with_data,
     list_tracked_models,
 )
 from carscraper.web.templating import templates
@@ -498,9 +498,14 @@ def add_tracked_model(
 
 @router.delete("/tracked-models/{tracked_model_id}", response_class=HTMLResponse)
 def remove_tracked_model(request: Request, tracked_model_id: int) -> HTMLResponse:
-    """Delete a tracked model and re-render the tracked-models list partial."""
+    """Delete a tracked model (and all its listing data) and re-render the list.
+
+    Calls `delete_tracked_model_with_data`, which purges ListingImage files +
+    rows, PriceSnapshot rows, CarListing rows, and the TrackedModel row in one
+    atomic operation.
+    """
     with get_session() as session:
-        delete_tracked_model(session, tracked_model_id)
+        delete_tracked_model_with_data(session, tracked_model_id)
         tracked_models = list_tracked_models(session)
 
     return templates.TemplateResponse(

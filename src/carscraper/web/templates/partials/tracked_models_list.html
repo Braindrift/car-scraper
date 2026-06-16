@@ -26,10 +26,10 @@
               hx-delete="/tracked-models/{{ tracked.id }}"
               hx-target="#tracked-models-list"
               hx-swap="innerHTML"
-              hx-confirm="Remove {{ tracked.make }} {{ tracked.model }}{% if tracked.variant %} {{ tracked.variant }}{% endif %}?"
-              class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+              hx-confirm="Delete {{ tracked.make }} {{ tracked.model }}{% if tracked.variant %} {{ tracked.variant }}{% endif %} and ALL its listings? This is irreversible."
+              class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
             >
-              Remove
+              Delete
             </button>
           </td>
         </tr>
