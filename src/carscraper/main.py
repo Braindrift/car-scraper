@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from carscraper.api import listings as api_listings
 from carscraper.config import settings
 from carscraper.web import routes as web_routes
 
@@ -22,6 +23,7 @@ def create_app() -> FastAPI:
         """Liveness check used by `uvicorn`/monitoring."""
         return {"status": "ok"}
 
+    app.include_router(api_listings.router)
     app.include_router(web_routes.router)
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

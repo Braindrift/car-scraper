@@ -13,6 +13,7 @@
         <th class="py-2 pr-4" data-sort-type="text">Status</th>
         <th class="py-2 pr-4"></th>
         <th class="py-2 pr-4"></th>
+        <th class="py-2 pr-4"></th>
       </tr>
     </thead>
     <tbody>
@@ -67,6 +68,15 @@
                 class="text-gray-500 hover:text-red-600 hover:underline"
               >Discard</button>
             {% endif %}
+          </td>
+          <td class="py-2 pr-4">
+            <button
+              hx-delete="/api/listings/{{ listing.id }}"
+              hx-target="closest tr"
+              hx-swap="outerHTML swap:0.15s"
+              hx-confirm="Permanently delete this listing? This cannot be undone."
+              class="text-red-500 hover:text-red-700 hover:underline"
+            >Delete</button>
           </td>
         </tr>
       {% endfor %}

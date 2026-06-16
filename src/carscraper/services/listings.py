@@ -8,12 +8,15 @@ filters, it returns the matching `CarListing` rows, most-recently-seen first.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from carscraper.config import settings
 from carscraper.db.models import (
     CarListing,
     Dealer,
@@ -22,6 +25,8 @@ from carscraper.db.models import (
     ScrapeRun,
 )
 from carscraper.services.scrape_results import CHANGE_UPDATED
+
+logger = logging.getLogger(__name__)
 
 # Dashboard status values for a listing relative to when the user last viewed
 # it (CAR-14). This is a service-level concept (the templates only render the
@@ -289,6 +294,72 @@ def mark_listing_viewed(session: Session, listing_id: int) -> None:
         return
     listing.last_viewed_at = _now()
     session.commit()
+
+
+def delete_car_listing(
+    session: Session,
+    listing_id: int,
+    *,
+    static_root: Path | None = None,
+) -> bool:
+    """Permanently delete a single `CarListing` and all its associated data.
+
+    Deletes, in order:
+
+    1. `ListingImage` files from disk (under ``<static_root>/images/``).
+    2. `ListingImage` rows (via SQLAlchemy cascade when the parent
+       `CarListing` is deleted, but the files must be removed first).
+    3. `PriceSnapshot` rows (likewise via cascade).
+    4. `ScrapeLogEntry` rows (likewise via cascade).
+    5. The `CarListing` row itself.
+
+    No `TrackedModel` is touched — use `delete_tracked_model_with_data` in
+    `services/tracked_models.py` to purge an entire make/model at once.
+
+    Returns `True` if the listing existed and was deleted, `False` if no row
+    with `listing_id` existed.
+
+    `static_root` is injectable for tests (defaults to
+    ``settings.static_root``).
+    """
+    listing = session.get(CarListing, listing_id, options=[selectinload(CarListing.images)])
+    if listing is None:
+        return False
+
+    root = static_root if static_root is not None else settings.static_root
+
+    # Delete on-disk image files before the DB rows are removed.
+    for image in listing.images:
+        image_path = root / image.local_path
+        try:
+            image_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning(
+                "Could not remove image file %s for listing %s: %s",
+                image_path,
+                listing.external_id,
+                exc,
+            )
+
+    # Remove the listing's image directory if it is now empty (best-effort).
+    if listing.images:
+        # `dealer.scraper_module` is not loaded here; derive it from the image path.
+        # Image paths are ``images/<dealer_slug>/<external_id>/<n>.<ext>``.
+        first_path = root / listing.images[0].local_path
+        image_dir = first_path.parent
+        try:
+            if image_dir.exists() and not any(image_dir.iterdir()):
+                import shutil
+
+                shutil.rmtree(image_dir, ignore_errors=True)
+        except OSError:
+            pass
+
+    # Delete the CarListing row — cascades remove PriceSnapshot, ListingImage,
+    # and ScrapeLogEntry rows automatically.
+    session.delete(listing)
+    session.commit()
+    return True
 
 
 def set_listing_discarded(session: Session, listing_id: int, discarded: bool) -> CarListing | None:

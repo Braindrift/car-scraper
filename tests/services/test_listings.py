@@ -10,12 +10,14 @@ from __future__ import annotations
 from collections.abc import Generator
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import CarListing, Dealer
+from carscraper.db.models import CarListing, Dealer, ListingImage, PriceSnapshot
 from carscraper.db.session import Base, create_db_engine
 from carscraper.services.listings import (
     ListingFilters,
+    delete_car_listing,
     list_car_listings,
     list_dealers_with_listings,
     set_listing_discarded,
@@ -263,3 +265,80 @@ def test_list_dealers_with_listings_empty(session: Session) -> None:
     dealers = list_dealers_with_listings(session)
 
     assert dealers == []
+
+
+# ---------------------------------------------------------------------------
+# delete_car_listing — cascade tests (CAR-32)
+# ---------------------------------------------------------------------------
+
+
+def test_delete_car_listing_removes_row(session: Session, seeded: dict[str, object]) -> None:
+    listing = seeded["volvo_active"]
+    listing_id = listing.id
+
+    result = delete_car_listing(session, listing_id)
+
+    assert result is True
+    assert session.get(CarListing, listing_id) is None
+
+
+def test_delete_car_listing_returns_false_for_missing(session: Session) -> None:
+    result = delete_car_listing(session, 9999)
+
+    assert result is False
+
+
+def test_delete_car_listing_leaves_other_listings_intact(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    delete_car_listing(session, seeded["volvo_active"].id)
+
+    remaining = list_car_listings(session)
+    remaining_ids = {listing.id for listing in remaining}
+    assert seeded["volvo_inactive"].id in remaining_ids
+    assert seeded["kia"].id in remaining_ids
+    assert seeded["volvo_active"].id not in remaining_ids
+
+
+def test_delete_car_listing_cascades_price_snapshots(
+    session: Session, seeded: dict[str, object]
+) -> None:
+    listing = seeded["volvo_active"]
+    session.add(PriceSnapshot(listing_id=listing.id, price=150_000))
+    session.commit()
+
+    delete_car_listing(session, listing.id)
+
+    rows = session.execute(
+        select(PriceSnapshot).where(PriceSnapshot.listing_id == listing.id)
+    ).first()
+    assert rows is None
+
+
+def test_delete_car_listing_removes_image_files(
+    tmp_path, session: Session, seeded: dict[str, object]
+) -> None:
+    listing = seeded["volvo_active"]
+
+    static_root = tmp_path / "static"
+    img_dir = static_root / "images" / "bilia" / listing.external_id
+    img_dir.mkdir(parents=True)
+    img_file = img_dir / "0.jpg"
+    img_file.write_bytes(b"fake-image")
+
+    session.add(
+        ListingImage(
+            listing_id=listing.id,
+            local_path=f"images/bilia/{listing.external_id}/0.jpg",
+            position=0,
+        )
+    )
+    session.commit()
+
+    delete_car_listing(session, listing.id, static_root=static_root)
+
+    assert not img_file.exists()
+    rows = session.execute(
+        select(ListingImage).where(ListingImage.listing_id == listing.id)
+    ).first()
+    assert rows is None
