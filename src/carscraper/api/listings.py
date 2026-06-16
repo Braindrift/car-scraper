@@ -14,16 +14,16 @@ from carscraper.services.listings import delete_car_listing
 router = APIRouter(prefix="/api/listings", tags=["listings-api"])
 
 
-@router.delete("/{listing_id}", status_code=204)
+@router.delete("/{listing_id}")
 def delete_listing(listing_id: int) -> Response:
     """Permanently delete a single `CarListing` and all its associated data.
 
     Deletes the `CarListing` row, its `PriceSnapshot` rows, its
     `ListingImage` rows, and any on-disk image files. No `TrackedModel` is
-    touched. Returns 204 on success (whether or not the listing existed —
-    idempotent delete semantics).
+    touched. Returns 200 with an empty body so HTMX performs the outerHTML
+    swap (replacing the row with nothing, removing it from the DOM).
     """
     with get_session() as session:
         delete_car_listing(session, listing_id)
 
-    return Response(status_code=204)
+    return Response(content="", status_code=200)
