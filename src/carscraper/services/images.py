@@ -26,6 +26,7 @@ scrape without re-fetching unchanged images.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -35,6 +36,8 @@ from sqlalchemy.orm import Session
 
 from carscraper.config import settings
 from carscraper.db.models import CarListing, ListingImage
+
+logger = logging.getLogger(__name__)
 
 # Fallback extension when a URL doesn't carry a recognizable image suffix.
 _DEFAULT_EXT = "jpg"
@@ -112,8 +115,25 @@ def download_listing_images(
             if position in already:
                 continue
 
-            response = client.get(url)
-            response.raise_for_status()
+            try:
+                response = client.get(url)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                logger.warning(
+                    "Skipping image position %d for listing %s: %s",
+                    position,
+                    listing.external_id,
+                    exc,
+                )
+                continue
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "Skipping image position %d for listing %s: request failed: %s",
+                    position,
+                    listing.external_id,
+                    exc,
+                )
+                continue
 
             ext = _extension_for(url)
             file_path = target_dir / f"{position}.{ext}"
