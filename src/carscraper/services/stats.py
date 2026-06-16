@@ -1,4 +1,4 @@
-"""Aggregation queries for meta-information (CAR-8, CAR-19, CAR-24).
+"""Aggregation queries for meta-information (CAR-8, CAR-19, CAR-24, CAR-28).
 
 Per CLAUDE.md, routers/web never construct SQL/ORM queries directly — they
 call into this module. This module provides:
@@ -20,6 +20,11 @@ are computed only over "usable" prices — see `_usable_prices` — while
 "low bid" listings whose price is excluded from the aggregates).
 `excluded_count` reports how many of those in-scope listings were left out of
 the price aggregates.
+
+CAR-28: `model_overview_stats` normalises each listing's `(make, model)` to
+the canonical casing defined in `TrackedModel` before grouping, so listings
+that differ only in casing (e.g. "Ford S-MAX" vs "Ford S-Max") are merged
+into one stats row.  See `_build_canonical_map` for details.
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ from datetime import datetime
 from sqlalchemy import Case, case, select
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import CarListing, PriceSnapshot
+from carscraper.db.models import CarListing, PriceSnapshot, TrackedModel
 
 # A non-null price counts toward avg/min/max/median only if it's at least
 # this fraction of the preliminary median price for its scope. Prices below
@@ -209,6 +214,30 @@ def _price_stats(all_prices: list[int | None]) -> _PriceStats:
     )
 
 
+def _build_canonical_map(session: Session) -> dict[tuple[str, str], tuple[str, str]]:
+    """Return a lookup from lowercase `(make, model)` to canonical `(make, model)`.
+
+    Loads all `TrackedModel` rows and indexes them by
+    `(make.casefold(), model.casefold())`.  Used by `model_overview_stats`
+    (CAR-28) to normalise each listing's raw make/model to the casing
+    defined in `TrackedModel` before grouping — so "Ford S-MAX" and
+    "Ford S-Max" merge into whichever casing `TrackedModel` stores.
+
+    Listings whose `(make, model)` has no matching `TrackedModel` (after
+    case-folding) are left under their own raw value; they still appear as a
+    separate stats row so no data is silently discarded.
+    """
+    stmt = select(TrackedModel.make, TrackedModel.model)
+    canonical: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in session.execute(stmt):
+        key = (row.make.casefold(), row.model.casefold())
+        # First entry wins if two TrackedModel rows somehow share a casefolded
+        # key (the DB unique constraint is case-sensitive, so this is possible
+        # though unlikely in practice).
+        canonical.setdefault(key, (row.make, row.model))
+    return canonical
+
+
 def model_overview_stats(
     session: Session,
     make: str | None = None,
@@ -233,13 +262,22 @@ def model_overview_stats(
     )
     stmt = _apply_active_filter(stmt, include_inactive)
     if make is not None:
-        stmt = stmt.where(CarListing.make == make)
+        stmt = stmt.where(CarListing.make.ilike(make))
     if model is not None:
-        stmt = stmt.where(CarListing.model == model)
+        stmt = stmt.where(CarListing.model.ilike(model))
+
+    canonical_map = _build_canonical_map(session)
 
     prices_by_group: dict[tuple[str, str], list[int | None]] = defaultdict(list)
     for row in session.execute(stmt):
-        prices_by_group[(row.make, row.model)].append(row.price)
+        # CAR-28: resolve raw make/model to TrackedModel-canonical casing.
+        # Listings with no matching TrackedModel are grouped under their own
+        # raw value so no data is silently discarded.
+        canonical_key = canonical_map.get(
+            (row.make.casefold(), row.model.casefold()),
+            (row.make, row.model),
+        )
+        prices_by_group[canonical_key].append(row.price)
 
     results = []
     for (group_make, group_model), prices in prices_by_group.items():
@@ -284,9 +322,9 @@ def year_bucket_stats(
     stmt = select(CarListing.year, CarListing.price)
     stmt = _apply_active_filter(stmt, include_inactive)
     if make is not None:
-        stmt = stmt.where(CarListing.make == make)
+        stmt = stmt.where(CarListing.make.ilike(make))
     if model is not None:
-        stmt = stmt.where(CarListing.model == model)
+        stmt = stmt.where(CarListing.model.ilike(model))
 
     prices_by_bucket: dict[int | None, list[int | None]] = defaultdict(list)
     scope_prices: list[int] = []
@@ -369,9 +407,9 @@ def mileage_bucket_stats(
     stmt = select(bucket_expr.label("bucket"), CarListing.price)
     stmt = _apply_active_filter(stmt, include_inactive)
     if make is not None:
-        stmt = stmt.where(CarListing.make == make)
+        stmt = stmt.where(CarListing.make.ilike(make))
     if model is not None:
-        stmt = stmt.where(CarListing.model == model)
+        stmt = stmt.where(CarListing.model.ilike(model))
 
     prices_by_bucket: dict[str, list[int | None]] = defaultdict(list)
     scope_prices: list[int] = []

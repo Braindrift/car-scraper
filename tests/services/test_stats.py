@@ -1,4 +1,4 @@
-"""Tests for `services.stats` (CAR-8, CAR-19, CAR-20, CAR-24).
+"""Tests for `services.stats` (CAR-8, CAR-19, CAR-20, CAR-24, CAR-28).
 
 `price_history` is exercised against a seeded temporary SQLite database,
 covering populated and empty cases. `model_overview_stats`,
@@ -9,7 +9,8 @@ against a second seeded database covering rollups, bucket boundaries,
 `excluded_count` fields and "low bid" exclusion are exercised against a third
 seeded database covering: a group with no priced listings, a bucket that's
 entirely "low bid" relative to the overall scope, and a mixed group with some
-listings excluded and some counted.
+listings excluded and some counted. CAR-28's make/model casing normalisation
+is exercised against a fourth seeded database.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
-from carscraper.db.models import CarListing, Dealer, PriceSnapshot
+from carscraper.db.models import CarListing, Dealer, PriceSnapshot, TrackedModel
 from carscraper.db.session import Base, create_db_engine
 from carscraper.services.stats import (
     mileage_bucket_stats,
@@ -557,3 +558,122 @@ def test_year_bucket_stats_no_priced_listings_reports_none(
         assert row.excluded_count == row.listing_count
 
     assert sum(row.listing_count for row in results) == 2
+
+
+# ---------------------------------------------------------------------------
+# CAR-28: make/model casing normalisation via TrackedModel
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def car28_seeded(session: Session) -> dict[str, object]:
+    """Seed listings and TrackedModels for CAR-28 casing-normalisation tests.
+
+    - TrackedModel("Ford", "S-Max") defines the canonical casing.
+    - Two CarListing rows: one stored as "Ford"/"S-MAX" (all-caps suffix),
+      another as "ford"/"s-max" (all-lowercase) — both should merge into
+      a single stats row with the TrackedModel's casing ("Ford", "S-Max").
+    - One CarListing for "Opel"/"Astra" with no matching TrackedModel — it
+      should appear under its own raw value (not discarded).
+    """
+    dealer = Dealer(
+        name="Test Dealer", base_url="https://dealer.example", scraper_module="test_dealer"
+    )
+    session.add(dealer)
+    # Define canonical casing via TrackedModel.
+    session.add(TrackedModel(make="Ford", model="S-Max"))
+    session.commit()
+
+    listings = [
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="ford-1",
+            url="https://dealer.example/ford-1",
+            make="Ford",
+            model="S-MAX",
+            price=200_000,
+            active=True,
+        ),
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="ford-2",
+            url="https://dealer.example/ford-2",
+            make="ford",
+            model="s-max",
+            price=220_000,
+            active=True,
+        ),
+        CarListing(
+            dealer_id=dealer.id,
+            external_id="opel-1",
+            url="https://dealer.example/opel-1",
+            make="Opel",
+            model="Astra",
+            price=150_000,
+            active=True,
+        ),
+    ]
+    session.add_all(listings)
+    session.commit()
+
+    return {"dealer": dealer, **{listing.external_id: listing for listing in listings}}
+
+
+def test_model_overview_stats_merges_casing_variants(
+    session: Session, car28_seeded: dict[str, object]
+) -> None:
+    """CAR-28: listings that differ only in make/model casing merge into one row.
+
+    "Ford"/"S-MAX" and "ford"/"s-max" both match TrackedModel("Ford", "S-Max")
+    after case-folding, so `model_overview_stats` should produce exactly one
+    row for Ford S-Max (using the TrackedModel casing) combining both listings.
+    """
+    results = model_overview_stats(session)
+
+    makes_models = [(row.make, row.model) for row in results]
+    assert ("Ford", "S-Max") in makes_models, f"Expected canonical (Ford, S-Max) in {makes_models}"
+
+    # The raw variants ("Ford"/"S-MAX" and "ford"/"s-max") must not appear
+    # as separate rows.
+    assert ("Ford", "S-MAX") not in makes_models
+    assert ("ford", "s-max") not in makes_models
+
+    ford = next(row for row in results if row.make == "Ford" and row.model == "S-Max")
+    assert ford.listing_count == 2
+    assert ford.min_price == 200_000
+    assert ford.max_price == 220_000
+
+
+def test_model_overview_stats_unmatched_listing_uses_raw_value(
+    session: Session, car28_seeded: dict[str, object]
+) -> None:
+    """CAR-28: listings without a matching TrackedModel appear under their raw value."""
+    results = model_overview_stats(session)
+
+    makes_models = [(row.make, row.model) for row in results]
+    assert (
+        "Opel",
+        "Astra",
+    ) in makes_models, (
+        f"Expected unmatched (Opel, Astra) to appear under its raw value in {makes_models}"
+    )
+
+    opel = next(row for row in results if row.make == "Opel")
+    assert opel.listing_count == 1
+    assert opel.min_price == 150_000
+
+
+def test_model_overview_stats_ilike_filter_matches_differently_cased_listings(
+    session: Session, car28_seeded: dict[str, object]
+) -> None:
+    """CAR-28: make/model filter uses ilike so canonical values match raw DB rows.
+
+    Passing the canonical make="Ford", model="S-Max" should return all
+    Ford S-Max listings regardless of how their make/model was stored.
+    """
+    results = model_overview_stats(session, make="Ford", model="S-Max")
+
+    assert len(results) == 1
+    assert results[0].make == "Ford"
+    assert results[0].model == "S-Max"
+    assert results[0].listing_count == 2
