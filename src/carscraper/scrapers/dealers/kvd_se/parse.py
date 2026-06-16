@@ -155,6 +155,10 @@ def parse_auction(raw: dict) -> CarListingDTO | None:
         year=properties.get("modelYear"),
         mileage=_derive_mileage(properties),
         price=_derive_price(raw),
+        # kvd.se is a JSON API — price values are integers, never strings
+        # like "kr/mån". `raw_price_text` is left as None; leasing detection
+        # falls back to the `variant` check in `is_leasing_dto` (CAR-30).
+        raw_price_text=None,
         fuel_type=_derive_fuel_type(properties),
         transmission=properties.get("gearbox"),
         image_urls=_derive_image_urls(raw),

@@ -1,11 +1,11 @@
-"""Validation tests for `CarListingDTO` and `BaseScraper`."""
+"""Validation tests for `CarListingDTO`, `BaseScraper`, and `is_leasing_dto`."""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, is_leasing_dto
 
 
 def test_car_listing_dto_minimal_required_fields() -> None:
@@ -111,3 +111,81 @@ def test_base_scraper_subclass_must_implement_scrape() -> None:
 
     with pytest.raises(TypeError):
         IncompleteScraper()  # type: ignore[abstract]
+
+
+# ---------------------------------------------------------------------------
+# is_leasing_dto — CAR-30
+# ---------------------------------------------------------------------------
+
+
+def _dto(**kwargs) -> CarListingDTO:
+    """Construct a minimal `CarListingDTO` with optional field overrides."""
+    base = {
+        "external_id": "1",
+        "url": "https://example.com/1",
+        "make": "Volvo",
+        "model": "V60",
+    }
+    base.update(kwargs)
+    return CarListingDTO(**base)
+
+
+# -- positive cases: leasing detected ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw_price_text",
+    [
+        "2 450 kr/mån",
+        "3 990 KR/MÅN",  # uppercase variant
+        "2450 kr/man",  # ASCII fallback (encoding mishap)
+        "1 995 per månad",
+        "1 995 per manad",  # ASCII fallback
+        "Leasing 2 990 kr",
+        "leasing",
+        "LEASING",
+    ],
+)
+def test_is_leasing_dto_detects_price_text_keywords(raw_price_text: str) -> None:
+    dto = _dto(raw_price_text=raw_price_text, price=None)
+    assert is_leasing_dto(dto) is True
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "Leasing Edition",
+        "T6 leasing special",
+        "LEASING",
+    ],
+)
+def test_is_leasing_dto_detects_variant_keywords(variant: str) -> None:
+    dto = _dto(variant=variant)
+    assert is_leasing_dto(dto) is True
+
+
+# -- negative cases: normal for-sale listings ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw_price_text",
+    [
+        "439 700 kr",
+        "189 000 kr",
+        None,
+        "",
+    ],
+)
+def test_is_leasing_dto_passes_normal_price_text(raw_price_text: str | None) -> None:
+    dto = _dto(raw_price_text=raw_price_text, price=439700)
+    assert is_leasing_dto(dto) is False
+
+
+def test_is_leasing_dto_passes_normal_variant() -> None:
+    dto = _dto(variant="T6 AWD Core")
+    assert is_leasing_dto(dto) is False
+
+
+def test_is_leasing_dto_passes_no_price_text_no_variant() -> None:
+    dto = _dto()
+    assert is_leasing_dto(dto) is False

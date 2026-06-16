@@ -93,13 +93,20 @@ def _derive_fuel_type(card_data: Tag) -> str | None:
     return None
 
 
-def _derive_price(card: Tag) -> int | None:
-    """`.Card-mainPrice` text (e.g. "439 700 kr") with non-digits stripped."""
+def _derive_price(card: Tag) -> tuple[int | None, str | None]:
+    """`.Card-mainPrice` text parsed into a numeric price and the raw text.
+
+    Returns ``(price_int, raw_text)`` — ``raw_text`` is the untouched
+    ``.Card-mainPrice`` text (e.g. ``"2 450 kr/mån"``), used by
+    ``is_leasing_dto`` to detect leasing indicators before the text is
+    stripped to digits. Both values are ``None`` when the element is absent.
+    """
     price_el = card.select_one(".Card-mainPrice")
     if price_el is None:
-        return None
-    digits = _NON_DIGITS_RE.sub("", price_el.get_text())
-    return int(digits) if digits else None
+        return None, None
+    raw = price_el.get_text()
+    digits = _NON_DIGITS_RE.sub("", raw)
+    return (int(digits) if digits else None), raw
 
 
 def _derive_mileage(card_data: Tag) -> int | None:
@@ -215,6 +222,7 @@ def _parse_card(card: Tag) -> CarListingDTO | None:
     card_data = card.select_one("dl.Card-carData")
     img = card.select_one("img[data-src]")
     alt_text = img.get("alt") if img is not None else None
+    price, raw_price_text = _derive_price(card)
 
     return CarListingDTO(
         external_id=str(external_id),
@@ -224,7 +232,8 @@ def _parse_card(card: Tag) -> CarListingDTO | None:
         variant=_derive_variant(alt_text, str(make), str(model)),
         year=_derive_year(card_data) if card_data is not None else None,
         mileage=_derive_mileage(card_data) if card_data is not None else None,
-        price=_derive_price(card),
+        price=price,
+        raw_price_text=raw_price_text,
         fuel_type=_derive_fuel_type(card_data) if card_data is not None else None,
         # Not available on search-result cards (neither the grid nor the row
         # variant); only the detail page's "Vaxellada:" field has it. Fetching

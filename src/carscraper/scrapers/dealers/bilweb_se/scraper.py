@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec, is_leasing_dto
 from carscraper.scrapers.dealers.bilweb_se.api import fetch_search_pages
 from carscraper.scrapers.dealers.bilweb_se.parse import parse_listing_cards
 from carscraper.scrapers.registry import register
@@ -80,4 +80,7 @@ class BilwebSeScraper(BaseScraper):
         deduped = list({dto.external_id: dto for dto in dtos}.values())
 
         # Discard listings outside the southern-Sweden region (CAR-27).
-        return [dto for dto in deduped if _is_southern(dto.url)]
+        southern = [dto for dto in deduped if _is_southern(dto.url)]
+
+        # Discard leasing offers — only for-sale listings are of interest (CAR-30).
+        return [dto for dto in southern if not is_leasing_dto(dto)]

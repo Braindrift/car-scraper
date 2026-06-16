@@ -145,13 +145,13 @@ async def test_scrape_returns_parsed_dtos(monkeypatch) -> None:
 
     # CAR-27: southern-region filter is applied after dedup.
     # peugeot_5008: 12744081 (stockholms-lan) filtered, 12740039 (ostergotlands-lan)
-    # filtered, 12743030 (hallands-lan) kept → 1 listing.
+    # filtered, 12743030 (hallands-lan) → passes southern filter but is a
+    # "Privatleasing" listing (variant contains "leasing") → filtered by
+    # CAR-30 leasing filter → 0 listings.
     # volvo_xc60: 12744401 (vasternorrlands-lan) filtered, 12744358 (sodermanlands-lan)
     # filtered → 0 listings.
-    assert len(listings) == 1
+    assert len(listings) == 0
     assert all(isinstance(dto, CarListingDTO) for dto in listings)
-    by_id = {dto.external_id: dto for dto in listings}
-    assert by_id["12743030"].make == "Peugeot"
 
 
 async def test_scrape_dedupes_by_external_id(monkeypatch) -> None:
@@ -168,10 +168,11 @@ async def test_scrape_dedupes_by_external_id(monkeypatch) -> None:
     ]
     listings = await scraper.scrape(tracked)
 
-    # CAR-27: peugeot_5008 has 3 cards but only 12743030 (hallands-lan) is
-    # southern; the same page is fetched twice (two specs) but deduped to one.
-    assert len(listings) == 1
-    assert len({dto.external_id for dto in listings}) == 1
+    # CAR-27: peugeot_5008 has 3 cards; 12744081/12740039 are non-southern,
+    # 12743030 (hallands-lan) is southern but is a "Privatleasing" listing
+    # (CAR-30 leasing filter). The same page is fetched twice (two specs) but
+    # deduped — result is 0 for-sale listings.
+    assert len(listings) == 0
 
 
 async def test_run_scraper_resolves_bilweb_se_slug(monkeypatch) -> None:

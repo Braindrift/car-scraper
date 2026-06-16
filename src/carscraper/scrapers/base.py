@@ -24,9 +24,25 @@ scraper can simply have a non-`await`-ing async body.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Leasing-indicator patterns checked (case-insensitively) against
+# `CarListingDTO.raw_price_text` and `CarListingDTO.variant` by
+# `is_leasing_dto`. Per CAR-30, these cover the most common signals found on
+# Swedish dealer sites; extend the tuple as real data reveals more patterns.
+_LEASING_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"kr/mån",  # "kr/mån"
+        r"kr/man",  # ASCII fallback for encoding mishaps
+        r"per månad",  # "per månad"
+        r"per manad",  # ASCII fallback
+        r"leasing",
+    )
+)
 
 
 class CarListingDTO(BaseModel):
@@ -56,11 +72,38 @@ class CarListingDTO(BaseModel):
     fuel_type: str | None = None
     transmission: str | None = None
 
+    # Raw price text from the dealer's site, before stripping to a numeric
+    # `price`. Populated by parse modules so that `is_leasing_dto` can detect
+    # leasing indicators (e.g. "2 450 kr/mån") that are lost once the text is
+    # reduced to an integer. `None` when no price element was found on the
+    # page.
+    raw_price_text: str | None = None
+
     # Remote image URLs from the dealer's site, in display order. Populated by
     # real dealer scrapers (step 3); `services/images.py` downloads these to
     # local static storage when a listing is persisted. Empty by default —
     # a listing with no images is valid (renders a placeholder in the UI).
     image_urls: list[str] = Field(default_factory=list)
+
+
+def is_leasing_dto(dto: CarListingDTO) -> bool:
+    """Return True if *dto* represents a leasing offer rather than a for-sale listing.
+
+    Checks both `raw_price_text` and `variant` for known leasing keywords
+    (see `_LEASING_PATTERNS`). Scrapers call this before appending a DTO to
+    their result list and discard any that match (CAR-30).
+
+    Detection is deliberately conservative — a false positive (excluding a
+    real for-sale listing) is worse than a false negative (keeping a leasing
+    listing), so only clear leasing signals are matched.
+    """
+    candidates: list[str] = []
+    if dto.raw_price_text is not None:
+        candidates.append(dto.raw_price_text)
+    if dto.variant is not None:
+        candidates.append(dto.variant)
+
+    return any(pattern.search(text) for pattern in _LEASING_PATTERNS for text in candidates)
 
 
 class TrackedModelSpec(BaseModel):

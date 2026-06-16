@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import httpx
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec, is_leasing_dto
 from carscraper.scrapers.dealers.bytbil_se.api import fetch_search_pages
 from carscraper.scrapers.dealers.bytbil_se.parse import parse_listing_cards
 from carscraper.scrapers.registry import register
@@ -41,4 +41,7 @@ class BytbilSeScraper(BaseScraper):
         # Dedupe by external_id — the same listing could theoretically appear
         # across pages if bytbil.se's pagination overlaps (uncommon but cheap
         # to guard against).
-        return list({dto.external_id: dto for dto in dtos}.values())
+        deduped = list({dto.external_id: dto for dto in dtos}.values())
+
+        # Discard leasing offers — only for-sale listings are of interest (CAR-30).
+        return [dto for dto in deduped if not is_leasing_dto(dto)]

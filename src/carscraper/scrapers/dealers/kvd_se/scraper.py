@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import httpx
 
-from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec
+from carscraper.scrapers.base import BaseScraper, CarListingDTO, TrackedModelSpec, is_leasing_dto
 from carscraper.scrapers.dealers.kvd_se.api import fetch_car_auctions
 from carscraper.scrapers.dealers.kvd_se.parse import parse_auction
 from carscraper.scrapers.registry import register
@@ -32,7 +32,7 @@ class KvdSeScraper(BaseScraper):
         listings: list[CarListingDTO] = []
         for raw in auctions:
             dto = parse_auction(raw)
-            if dto is not None:
+            if dto is not None and not is_leasing_dto(dto):
                 listings.append(dto)
 
         return listings

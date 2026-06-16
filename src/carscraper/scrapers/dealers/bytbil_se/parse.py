@@ -86,13 +86,21 @@ def _derive_mileage(segments: list[str]) -> int | None:
     return int(digits) if digits else None
 
 
-def _derive_price(card: Tag) -> int | None:
-    """``span.car-price-main`` text (e.g. ``"489\\xa0900 kr"``) with non-digits stripped."""
+def _derive_price(card: Tag) -> tuple[int | None, str | None]:
+    """``span.car-price-main`` text parsed into a numeric price and the raw text.
+
+    Returns ``(price_int, raw_text)`` — ``raw_text`` is the untouched
+    ``span.car-price-main`` text (e.g. ``"489\\xa0900 kr"`` or
+    ``"2 450 kr/mån"``), used by ``is_leasing_dto`` to detect leasing
+    indicators before the text is stripped to digits. Both values are ``None``
+    when the element is absent.
+    """
     el = card.select_one("span.car-price-main")
     if el is None:
-        return None
-    digits = _NON_DIGITS_RE.sub("", el.get_text())
-    return int(digits) if digits else None
+        return None, None
+    raw = el.get_text()
+    digits = _NON_DIGITS_RE.sub("", raw)
+    return (int(digits) if digits else None), raw
 
 
 def _derive_variant(title: str, make: str, model: str) -> str | None:
@@ -189,6 +197,7 @@ def _parse_card(card: Tag, make: str, model: str) -> CarListingDTO | None:
 
     title = _derive_title(card) or ""
     segments = _derive_info_segments(card)
+    price, raw_price_text = _derive_price(card)
 
     return CarListingDTO(
         external_id=str(external_id),
@@ -198,7 +207,8 @@ def _parse_card(card: Tag, make: str, model: str) -> CarListingDTO | None:
         variant=_derive_variant(title, make, model),
         year=_derive_year(segments),
         mileage=_derive_mileage(segments),
-        price=_derive_price(card),
+        price=price,
+        raw_price_text=raw_price_text,
         fuel_type=None,
         transmission=None,
         image_urls=_derive_image_urls(card),

@@ -150,6 +150,15 @@ implementations. To avoid repeating that:
      `CarListingDTO`s until tests pass.
   3. Register the dealer in the `scrapers/registry.py` and add a `Dealer` row.
   4. Verify against the live site with a manual `run-scrape --dealer=<slug>`.
+- **Leasing exclusion (mandatory for all scrapers)**: every scraper must
+  filter out leasing offers before returning from `scrape()`. Use
+  `is_leasing_dto` from `scrapers/base.py` — it checks `raw_price_text` and
+  `variant` for known leasing keywords ("kr/mån", "per månad", "leasing",
+  etc., case-insensitive). Parse modules must populate `raw_price_text` with
+  the raw price string from the page (before stripping to a numeric `price`)
+  so that strings like "2 450 kr/mån" can be detected. New patterns should be
+  added to `_LEASING_PATTERNS` in `scrapers/base.py` as real data reveals
+  them (CAR-30).
 - **Commands**: `ruff check .`, `black .`, `pytest`, `alembic upgrade head`,
   `python -m carscraper.cli run-scrape [--dealer=<slug>]`.
 
