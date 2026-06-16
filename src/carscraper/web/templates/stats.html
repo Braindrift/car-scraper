@@ -35,12 +35,12 @@
     <table class="w-full text-sm">
       <thead>
         <tr class="border-b border-gray-200 text-left text-gray-500">
-          <th class="py-2 pr-4">Make</th>
-          <th class="py-2 pr-4">Model</th>
-          <th class="py-2 pr-4">Avg. price</th>
-          <th class="py-2 pr-4">Median price</th>
+          <th class="py-2 pr-4" data-sort-type="text">Make</th>
+          <th class="py-2 pr-4" data-sort-type="text">Model</th>
+          <th class="py-2 pr-4" data-sort-type="number">Avg. price</th>
+          <th class="py-2 pr-4" data-sort-type="number">Median price</th>
           <th class="py-2 pr-4">Price range</th>
-          <th class="py-2 pr-4">Listings</th>
+          <th class="py-2 pr-4" data-sort-type="number">Listings</th>
           <th class="py-2 pr-4"></th>
         </tr>
       </thead>
@@ -50,14 +50,14 @@
           <tr class="border-b border-gray-100{% if is_current %} bg-blue-50{% endif %}">
             <td class="py-2 pr-4">{{ row.make }}</td>
             <td class="py-2 pr-4">{{ row.model }}</td>
-            <td class="py-2 pr-4">
+            <td class="py-2 pr-4" data-sort-value="{{ row.avg_price if row.avg_price is not none else '' }}">
               {% if row.avg_price is not none %}
                 {{ "{:,.0f}".format(row.avg_price).replace(",", " ") }} kr
               {% else %}
                 &mdash;
               {% endif %}
             </td>
-            <td class="py-2 pr-4">
+            <td class="py-2 pr-4" data-sort-value="{{ row.median_price if row.median_price is not none else '' }}">
               {% if row.median_price is not none %}
                 {{ "{:,.0f}".format(row.median_price).replace(",", " ") }} kr
               {% else %}
@@ -72,7 +72,7 @@
                 &mdash;
               {% endif %}
             </td>
-            <td class="py-2 pr-4">
+            <td class="py-2 pr-4" data-sort-value="{{ row.listing_count }}">
               {{ row.listing_count }}{% if row.excluded_count %} <span class="text-xs text-gray-400">({{ row.excluded_count }} excluded)</span>{% endif %}
             </td>
             <td class="py-2 pr-4">

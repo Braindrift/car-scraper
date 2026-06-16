@@ -2,15 +2,15 @@
   <table class="w-full text-sm">
     <thead>
       <tr class="border-b border-gray-200 text-left text-gray-500">
-        <th class="py-2 pr-4">Dealer</th>
-        <th class="py-2 pr-4">Make</th>
-        <th class="py-2 pr-4">Model</th>
-        <th class="py-2 pr-4">Variant</th>
-        <th class="py-2 pr-4">Year</th>
-        <th class="py-2 pr-4">Mileage</th>
-        <th class="py-2 pr-4">Price</th>
-        <th class="py-2 pr-4">Active</th>
-        <th class="py-2 pr-4">Status</th>
+        <th class="py-2 pr-4" data-sort-type="text">Dealer</th>
+        <th class="py-2 pr-4" data-sort-type="text">Make</th>
+        <th class="py-2 pr-4" data-sort-type="text">Model</th>
+        <th class="py-2 pr-4" data-sort-type="text">Variant</th>
+        <th class="py-2 pr-4" data-sort-type="number">Year</th>
+        <th class="py-2 pr-4" data-sort-type="number">Mileage</th>
+        <th class="py-2 pr-4" data-sort-type="number">Price</th>
+        <th class="py-2 pr-4" data-sort-type="text">Active</th>
+        <th class="py-2 pr-4" data-sort-type="text">Status</th>
         <th class="py-2 pr-4"></th>
         <th class="py-2 pr-4"></th>
       </tr>
@@ -26,11 +26,11 @@
           </td>
           <td class="py-2 pr-4">{{ listing.model }}</td>
           <td class="py-2 pr-4">{{ listing.variant or "-" }}</td>
-          <td class="py-2 pr-4">{{ listing.year or "-" }}</td>
-          <td class="py-2 pr-4">
+          <td class="py-2 pr-4" data-sort-value="{{ listing.year if listing.year is not none else '' }}">{{ listing.year or "-" }}</td>
+          <td class="py-2 pr-4" data-sort-value="{{ listing.mileage if listing.mileage is not none else '' }}">
             {{ "{:,}".format(listing.mileage).replace(",", " ") + " mil" if listing.mileage is not none else "-" }}
           </td>
-          <td class="py-2 pr-4">
+          <td class="py-2 pr-4" data-sort-value="{{ listing.price if listing.price is not none else '' }}">
             {{ "{:,}".format(listing.price).replace(",", " ") + " kr" if listing.price is not none else "-" }}
           </td>
           <td class="py-2 pr-4">
