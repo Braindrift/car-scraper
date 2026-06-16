@@ -1,4 +1,5 @@
-"""Tests for `BilwebSeScraper.scrape()` and `fetch_search_pages` (CAR-18).
+"""Tests for `BilwebSeScraper.scrape()`, `fetch_search_pages`, and the
+southern-region filter (CAR-18, CAR-27).
 
 Uses `httpx.MockTransport` keyed by request path: `/sok/peugeot/5008` ->
 `fixtures/peugeot_5008.html`, `/sok/volvo/xc60` -> `fixtures/volvo_xc60.html`.
@@ -14,7 +15,7 @@ import pytest
 
 from carscraper.scrapers.base import CarListingDTO, TrackedModelSpec
 from carscraper.scrapers.dealers.bilweb_se.api import fetch_search_pages
-from carscraper.scrapers.dealers.bilweb_se.scraper import BilwebSeScraper
+from carscraper.scrapers.dealers.bilweb_se.scraper import BilwebSeScraper, _is_southern
 from carscraper.scrapers.registry import get_scraper_class, run_scraper
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -142,11 +143,15 @@ async def test_scrape_returns_parsed_dtos(monkeypatch) -> None:
     ]
     listings = await scraper.scrape(tracked)
 
-    assert len(listings) == 5  # 3 from peugeot_5008 + 2 from volvo_xc60
+    # CAR-27: southern-region filter is applied after dedup.
+    # peugeot_5008: 12744081 (stockholms-lan) filtered, 12740039 (ostergotlands-lan)
+    # filtered, 12743030 (hallands-lan) kept → 1 listing.
+    # volvo_xc60: 12744401 (vasternorrlands-lan) filtered, 12744358 (sodermanlands-lan)
+    # filtered → 0 listings.
+    assert len(listings) == 1
     assert all(isinstance(dto, CarListingDTO) for dto in listings)
     by_id = {dto.external_id: dto for dto in listings}
-    assert by_id["12744081"].make == "Peugeot"
-    assert by_id["12744358"].make == "Volvo"
+    assert by_id["12743030"].make == "Peugeot"
 
 
 async def test_scrape_dedupes_by_external_id(monkeypatch) -> None:
@@ -163,8 +168,10 @@ async def test_scrape_dedupes_by_external_id(monkeypatch) -> None:
     ]
     listings = await scraper.scrape(tracked)
 
-    assert len(listings) == 3
-    assert len({dto.external_id for dto in listings}) == 3
+    # CAR-27: peugeot_5008 has 3 cards but only 12743030 (hallands-lan) is
+    # southern; the same page is fetched twice (two specs) but deduped to one.
+    assert len(listings) == 1
+    assert len({dto.external_id for dto in listings}) == 1
 
 
 async def test_run_scraper_resolves_bilweb_se_slug(monkeypatch) -> None:
@@ -175,9 +182,60 @@ async def test_run_scraper_resolves_bilweb_se_slug(monkeypatch) -> None:
 
     listings = await run_scraper("bilweb_se", [TrackedModelSpec(make="Volvo", model="XC60")])
 
-    assert len(listings) == 2
+    # CAR-27: both volvo_xc60 listings are in non-southern counties
+    # (vasternorrlands-lan, sodermanlands-lan), so all are filtered out.
+    assert len(listings) == 0
 
 
 @pytest.mark.parametrize("tracked", [None, []])
 async def test_run_scraper_with_no_tracked_models_returns_empty(tracked) -> None:
     assert await run_scraper("bilweb_se", tracked) == []
+
+
+# --- _is_southern (CAR-27) ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://bilweb.se/skane-lan/volvo-xc60-t6-2023-suv-99001",
+        "https://bilweb.se/hallands-lan/peugeot-5008-gt-2024-suv-99002",
+        "https://bilweb.se/blekinge-lan/volvo-xc60-d4-2020-suv-99003",
+        "https://bilweb.se/kronobergs-lan/bmw-320d-2022-sedan-99004",
+        "https://bilweb.se/jonkopings-lan/audi-a4-2021-sedan-99005",
+    ],
+)
+def test_is_southern_keeps_southern_county_urls(url: str) -> None:
+    """URLs from the five allowed southern counties pass the filter."""
+    assert _is_southern(url) is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://bilweb.se/vasternorrlands-lan/volvo-xc60-2023-suv-99010",
+        "https://bilweb.se/stockholms-lan/peugeot-5008-2024-suv-99011",
+        "https://bilweb.se/sodermanlands-lan/volvo-xc60-d4-2016-suv-99012",
+        "https://bilweb.se/ostergotlands-lan/bmw-320d-2022-sedan-99013",
+        "https://bilweb.se/vastmanlands-lan/audi-a4-2021-sedan-99014",
+    ],
+)
+def test_is_southern_filters_northern_county_urls(url: str) -> None:
+    """URLs from counties outside the allowed set are excluded."""
+    assert _is_southern(url) is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # Empty string: urlparse returns an empty path, no segment.
+        "",
+        # bilweb.se root with no path: path segment is empty after strip.
+        "https://bilweb.se/",
+        # bilweb.se with no trailing slash: path is empty.
+        "https://bilweb.se",
+    ],
+)
+def test_is_southern_fail_open_on_empty_county_segment(url: str) -> None:
+    """URLs that yield no county path segment are kept (fail-open)."""
+    assert _is_southern(url) is True
